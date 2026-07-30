@@ -1,0 +1,8 @@
+===== Python文件: test_enc.py =====
+default encoding: utf-8
+stdout encoding: gbk
+=== ���Ĳ��� ===
+������磡
+�������
+
+

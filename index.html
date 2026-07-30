@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一线工具平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            --sidebar-width: 260px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 64px;
+            margin: 0;
+        }
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            transition: width 0.3s ease-in-out;
+            z-index: 100;
+            overflow: hidden;
+            background-color: rgb(31 41 55);
+            will-change: width;
+            padding: 0.5rem;
+        }
+        .sidebar.collapsed { width: var(--sidebar-collapsed-width); }
+        .nav-text, .logo-text, .nav-item-extra {
+            transition: all 0.3s ease;
+            opacity: 1;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .sidebar.collapsed .nav-text,
+        .sidebar.collapsed .logo-text,
+        .sidebar.collapsed .nav-item-extra {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-20px);
+        }
+        .sidebar .nav-link {
+            position: relative;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+        }
+        .sidebar.collapsed .nav-link {
+            justify-content: flex-start !important;
+            padding: 0.75rem 1rem !important;
+            gap: 0 !important;
+            width: 100%;
+        }
+        .sidebar.collapsed .nav-link i {
+            margin: 0 !important;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .main-content {
+            margin-left: var(--sidebar-width);
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 10;
+            padding-top: var(--header-height);
+            min-height: 100vh;
+            width: calc(100% - var(--sidebar-width));
+            will-change: margin-left, width;
+        }
+        .sidebar.collapsed ~ .main-content {
+            margin-left: var(--sidebar-collapsed-width);
+            width: calc(100% - var(--sidebar-collapsed-width));
+        }
+        .header {
+            height: var(--header-height);
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
+            right: 0;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 90;
+            background-color: white;
+            border-bottom: 1px solid #e5e7eb;
+            backdrop-filter: blur(8px);
+            padding: 1rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            width: calc(100% - var(--sidebar-width));
+        }
+        .sidebar.collapsed ~ .main-content .header {
+            left: var(--sidebar-collapsed-width);
+            width: calc(100% - var(--sidebar-collapsed-width));
+        }
+        #page-container { position: relative; z-index: 10; width: 100%; overflow-x: hidden; }
+        #toggleSidebar {
+            position: relative; z-index: 20; width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; border-radius: 8px; background-color: transparent;
+            transition: all 0.3s ease; margin-right: 1rem;
+        }
+        #toggleSidebar:hover { background-color: rgba(0,0,0,0.05); }
+        #toggleSidebar i { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; transition: transform 0.3s ease; }
+        .nav-link.active { background-color: #4f46e5; color: white; }
+        .nav-link i { width: 1.5rem; text-align: center; transition: all 0.3s ease; flex-shrink: 0; }
+        .sidebar.collapsed .nav-link i { margin-right: 0; width: 1.5rem; font-size: 1.25rem; }
+        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .page { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .login-bg {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+        }
+        .toast {
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            padding: 12px 24px; border-radius: 8px; color: white;
+            font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+        }
+        .toast-success { background-color: #10b981; }
+        .toast-error { background-color: #ef4444; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        .progress-bar { transition: width 0.5s ease; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900">
+    <div id="login-page" class="login-bg">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <i class="fas fa-tools text-5xl text-indigo-600 mb-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800">一线工具平台</h1>
+                <p class="text-gray-500 mt-2">统一管理与分发企业工具</p>
+            </div>
+            <div id="login-tabs" class="flex mb-6 bg-gray-100 rounded-lg p-1">
+                <button onclick="switchLoginTab('login')" id="tab-login" class="flex-1 py-2 rounded-lg font-semibold bg-indigo-600 text-white transition">登录</button>
+                <button onclick="switchLoginTab('register')" id="tab-register" class="flex-1 py-2 rounded-lg font-semibold text-gray-500 transition">注册</button>
+            </div>
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                    <input type="text" id="login-username" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="请输入用户名">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="login-password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="请输入密码">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">登录</button>
+                <p class="text-sm text-gray-500 text-center mt-4">默认管理员: admin / 123456</p>
+            </form>
+            <form id="register-form" onsubmit="handleRegister(event)" style="display:none">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                    <input type="text" id="reg-username" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="请输入用户名">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">昵称</label>
+                    <input type="text" id="reg-nickname" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="选填">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="reg-password" required minlength="6" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="至少6位">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">注册</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="app" style="display:none">
+        <div class="flex">
+            <aside class="sidebar bg-gray-800 text-white flex flex-col p-4 fixed no-scrollbar overflow-y-auto">
+                <div class="text-2xl font-bold mb-8 flex items-center gap-2 nav-item-extra">
+                    <i class="fas fa-tools text-3xl text-indigo-400"></i>
+                    <span class="logo-text">一线工具平台</span>
+                </div>
+                <nav class="flex flex-col gap-2">
+                    <a href="#home" class="nav-link active flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('home')">
+                        <i class="fas fa-home"></i><span class="nav-text">首页</span>
+                    </a>
+                    <span class="px-4 mt-4 mb-1 text-xs uppercase text-gray-400 nav-item-extra">工具分类</span>
+                    <a href="#planning" class="nav-link flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('category', '规划')">
+                        <i class="fas fa-project-diagram"></i><span class="nav-text">规划</span>
+                    </a>
+                    <a href="#construction" class="nav-link flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('category', '建设')">
+                        <i class="fas fa-hammer"></i><span class="nav-text">建设</span>
+                    </a>
+                    <a href="#optimization" class="nav-link flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('category', '优化')">
+                        <i class="fas fa-chart-line"></i><span class="nav-text">优化</span>
+                    </a>
+                    <a href="#maintenance" class="nav-link flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('category', '维护')">
+                        <i class="fas fa-wrench"></i><span class="nav-text">维护</span>
+                    </a>
+                    <a href="#operation" class="nav-link flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors" onclick="switchPage('category', '客服')">
+                        <i class="fas fa-cogs"></i><span class="nav-text">客服</span>
+                    </a>
+                </nav>
+                <div class="mt-auto p-4 bg-gray-700 rounded-lg text-center nav-item-extra">
+                    <p class="text-sm">遇到问题？</p>
+                    <a href="#" onclick="switchPage('messages')" class="text-indigo-300 hover:underline text-sm font-semibold">反馈与帮助</a>
+                </div>
+            </aside>
+            <div class="main-content flex-1 flex flex-col">
+                <header class="header">
+                    <button onclick="goBack()" class="mr-4 w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 focus:outline-none transition-all duration-300">
+                        <i class="fas fa-arrow-left text-xl"></i>
+                    </button>
+                    <div class="relative flex-1 max-w-lg flex">
+                        <div class="relative flex-1">
+                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input type="search" id="searchInput" placeholder="搜索工具名称、关键字..." class="w-full bg-gray-100 border-none rounded-l-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 rounded-r-lg flex items-center justify-center" onclick="performSearch()">搜索</button>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button class="text-gray-500 hover:text-gray-700" onclick="switchPage('messages')">
+                            <i class="fas fa-bell text-2xl"></i>
+                            <span id="msg-badge" class="hidden absolute -mt-2 -mr-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">0</span>
+                        </button>
+                        <div class="relative" id="user-menu-button">
+                            <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold cursor-pointer" id="avatar-circle">A</div>
+                            <div id="user-menu" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 hidden ring-1 ring-black ring-opacity-5">
+                                <a href="#profile" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onclick="switchPage('profile')">
+                                    <i class="fas fa-user"></i>个人中心
+                                </a>
+                                <a href="#manage" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onclick="switchPage('manage')">
+                                    <i class="fas fa-toolbox"></i>工具管理
+                                </a>
+                                <a href="#messages" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onclick="switchPage('messages')">
+                                    <i class="fas fa-bell"></i>消息中心
+                                </a>
+                                <div class="border-t border-gray-100 my-1"></div>
+                                <a href="#" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" onclick="handleLogout()">
+                                    <i class="fas fa-sign-out-alt"></i>退出登录
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+                <main class="flex-1 p-8 overflow-y-auto">
+                    <div id="page-container"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API_BASE = window.location.origin;
+    let authToken = localStorage.getItem('token') || null;
+    let currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+    let downloadsChartInstance = null;
+    let currentPage = 'home';
+    let currentParam = null;
+    let pageHistory = [];
+    let isBackNavigation = false;
+
+    function showToast(msg, type = 'success') {
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
+
+    async function api(path, options = {}) {
+        const headers = options.headers || {};
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+        if (options.json) {
+            headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(options.json);
+        }
+        delete options.json;
+        options.headers = headers;
+        const res = await fetch(`${API_BASE}${path}`, options);
+        const data = await res.json();
+        if (!res.ok) {
+            if (res.status === 401) { logout(); }
+            throw new Error(data.error || '请求失败');
+        }
+        return data;
+    }
+
+    function switchLoginTab(tab) {
+        document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+        document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+        document.getElementById('tab-login').className = `flex-1 py-2 rounded-lg font-semibold transition ${tab === 'login' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`;
+        document.getElementById('tab-register').className = `flex-1 py-2 rounded-lg font-semibold transition ${tab === 'register' ? 'bg-indigo-600 text-white' : 'text-gray-500'}`;
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        try {
+            const data = await api('/api/auth/login', {
+                method: 'POST',
+                json: { username: document.getElementById('login-username').value, password: document.getElementById('login-password').value }
+            });
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('token', authToken);
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            initApp();
+            showToast('登录成功');
+        } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function handleRegister(e) {
+        e.preventDefault();
+        try {
+            const data = await api('/api/auth/register', {
+                method: 'POST',
+                json: { username: document.getElementById('reg-username').value, password: document.getElementById('reg-password').value, nickname: document.getElementById('reg-nickname').value }
+            });
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('token', authToken);
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            initApp();
+            showToast('注册成功');
+        } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function logout() {
+        authToken = null;
+        currentUser = null;
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('login-page').style.display = 'flex';
+    }
+
+    function handleLogout() { logout(); showToast('已退出登录'); }
+
+    function initApp() {
+        document.getElementById('login-page').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        if (currentUser) {
+            document.getElementById('avatar-circle').textContent = (currentUser.nickname || currentUser.username || 'U').charAt(0).toUpperCase();
+        }
+        loadUnreadCount();
+        switchPage('home');
+    }
+
+    async function loadUnreadCount() {
+        if (!authToken) return;
+        try {
+            const data = await api('/api/messages');
+            const unread = data.messages.filter(m => m.status === '未读').length;
+            const badge = document.getElementById('msg-badge');
+            if (unread > 0) { badge.textContent = unread; badge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); }
+        } catch(e) {}
+    }
+
+    const toolTypeColors = {
+        excel: 'bg-green-100 text-green-800',
+        python: 'bg-blue-100 text-blue-800',
+        bash: 'bg-gray-200 text-gray-800',
+        bat: 'bg-yellow-100 text-yellow-800'
+    };
+
+    function createToolCard(tool) {
+        const colors = toolTypeColors[tool.type] || 'bg-gray-100 text-gray-800';
+        const desc = (tool.description || '').substring(0, 40);
+        return `
+        <div class="bg-white rounded-lg shadow-md p-4 flex flex-col hover:shadow-xl transition-shadow cursor-pointer" onclick="switchPage('detail', ${tool.id})">
+            <div class="flex justify-between items-start">
+                <span class="px-2 py-1 text-xs rounded font-semibold ${colors}">${tool.type}</span>
+                <div class="flex items-center gap-1 text-sm text-gray-500">
+                    <i class="fas fa-download"></i><span>${tool.downloads + (tool.calls||0)}</span>
+                </div>
+            </div>
+            <h3 class="font-bold mt-3 text-lg">${tool.name}</h3>
+            <p class="text-sm text-gray-500 mt-1 flex-grow">${desc}...</p>
+            <div class="text-xs text-gray-400 mt-4 pt-2 border-t border-gray-100">由 ${tool.author_name} 提供</div>
+        </div>`;
+    }
+
+    const categoryIcons = { '规划': 'fa-project-diagram', '建设': 'fa-hammer', '优化': 'fa-chart-line', '维护': 'fa-wrench', '客服': 'fa-cogs' };
+    const categoryColors = { '规划': 'text-blue-500', '建设': 'text-orange-500', '优化': 'text-green-500', '维护': 'text-purple-500', '客服': 'text-red-500' };
+
+    async function renderHomePage() {
+        try {
+            const [dashData, usageData] = await Promise.all([
+                api('/api/stats/dashboard'),
+                api('/api/stats/recent_usage').catch(() => ({ tools: [] }))
+            ]);
+            const cats = ['规划', '建设', '优化', '维护', '客服'];
+            const catCards = cats.map(name => {
+                const s = dashData.categories[name] || { count: 0, downloads: 0, calls: 0 };
+                return `<div class="stat-card bg-white p-6 rounded-lg shadow-md transition-all">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 mb-3">
+                        <i class="fas ${categoryIcons[name]} text-xl ${categoryColors[name]}"></i>
+                    </div>
+                    <h3 class="text-gray-500 text-sm font-medium">${name}类工具总数</h3>
+                    <p class="text-3xl font-bold mt-2">${s.count}</p>
+                    <div class="mt-4 space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500">今日下载/调用</span>
+                            <span class="text-sm font-medium">${s.downloads + s.calls}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500">累计下载/调用</span>
+                            <span class="text-sm font-medium">${s.downloads + s.calls}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const recentTools = (usageData.tools || []).slice(0, 4);
+            const recentCards = recentTools.length > 0
+                ? recentTools.map(createToolCard).join('')
+                : '<p class="col-span-full text-gray-400">暂无使用记录</p>';
+
+            const hotList = (dashData.hot_tools || []).slice(0, 5).map((t, i) => `
+                <div class="flex items-center justify-between p-2 rounded hover:bg-gray-50 cursor-pointer" onclick="switchPage('detail', ${t.id})">
+                    <div class="flex items-center gap-4">
+                        <span class="font-bold text-lg w-6 text-center ${i < 3 ? 'text-indigo-500' : 'text-gray-400'}">${i + 1}</span>
+                        <div><p class="font-semibold">${t.name}</p><p class="text-xs text-gray-500">${t.author_name}</p></div>
+                    </div>
+                    <div class="flex items-center gap-1 text-sm text-gray-600"><i class="fas fa-download"></i><span>${t.downloads}</span></div>
+                </div>`).join('');
+
+            const authorList = (dashData.author_stats || []).slice(0, 5).map((a, i) => `
+                <div class="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                    <div class="flex items-center gap-4">
+                        <span class="font-bold text-lg w-6 text-center ${i < 3 ? 'text-indigo-500' : 'text-gray-400'}">${i + 1}</span>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">${(a.author_name||'?').charAt(0)}</div>
+                            <p class="font-semibold">${a.author_name}</p>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600">贡献 <strong>${a.tool_count}</strong> 个工具</div>
+                </div>`).join('');
+
+            return `
+            <div class="page pt-6">
+                <h1 class="text-3xl font-bold mb-2">欢迎回来！${currentUser ? currentUser.nickname || currentUser.username : ''}</h1>
+                <p class="text-gray-500 mb-8">开始新的一天，让高效工具助您一臂之力。</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-8">${catCards}</div>
+                <h2 class="text-2xl font-bold mb-4">最近使用</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">${recentCards}</div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">工具热度榜</h2>
+                        <div class="bg-white rounded-lg shadow-md p-4 space-y-3">${hotList || '<p class="text-gray-400">暂无数据</p>'}</div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">作者贡献榜</h2>
+                        <div class="bg-white rounded-lg shadow-md p-4 space-y-3">${authorList || '<p class="text-gray-400">暂无数据</p>'}</div>
+                    </div>
+                </div>
+            </div>`;
+        } catch(e) {
+            return `<div class="page"><p class="text-red-500">加载失败: ${e.message}</p></div>`;
+        }
+    }
+
+    async function renderCategoryPage(category) {
+        try {
+            const data = await api(`/api/tools?category=${encodeURIComponent(category)}`);
+            const cards = data.tools.length > 0
+                ? data.tools.map(createToolCard).join('')
+                : '<p class="col-span-full text-center text-gray-500">该分类下暂无工具。</p>';
+            return `<div class="page"><h1 class="text-3xl font-bold mb-6">${category}类工具</h1>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">${cards}</div></div>`;
+        } catch(e) {
+            return `<div class="page"><p class="text-red-500">加载失败: ${e.message}</p></div>`;
+        }
+    }
+
+    async function renderSearchPage(query) {
+        try {
+            const data = await api(`/api/tools?search=${encodeURIComponent(query)}`);
+            const cards = data.tools.length > 0
+                ? data.tools.map(createToolCard).join('')
+                : '<p class="col-span-full text-center text-gray-500">未找到与您的搜索相关的工具。</p>';
+            return `<div class="page"><h1 class="text-3xl font-bold mb-6">搜索结果: <span class="text-indigo-500">${query}</span></h1>
+                <p class="mb-8 text-gray-600">共找到 ${data.tools.length} 个相关工具。</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">${cards}</div></div>`;
+        } catch(e) {
+            return `<div class="page"><p class="text-red-500">搜索失败: ${e.message}</p></div>`;
+        }
+    }
+
+    async function renderDetailPage(toolId) {
+        try {
+            const tool = await api(`/api/tools/${toolId}`);
+            const colors = toolTypeColors[tool.type] || 'bg-gray-100 text-gray-800';
+            const keywords = (tool.keywords || '').split(',').filter(k => k.trim()).map(k =>
+                `<span class="bg-gray-200 text-sm px-2 py-1 rounded">${k.trim()}</span>`
+            ).join('');
+            const reviews = (tool.reviews || []).map(r => `
+                <div class="border-b border-gray-100 pb-2">
+                    <p class="font-semibold">${r.username}</p>
+                    <p class="text-sm text-gray-600">"${r.content}"</p>
+                    <p class="text-xs text-gray-400 mt-1">${r.created_at || ''}</p>
+                </div>`).join('');
+            const instructions = tool.instructions || '暂无使用说明。';
+
+            return `
+            <div class="page">
+                <button onclick="goBack()" class="mb-4 inline-flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition">
+                    <i class="fas fa-arrow-left"></i> 返回
+                </button>
+                <div class="flex flex-col md:flex-row justify-between items-start mb-8">
+                    <div>
+                        <h1 class="text-4xl font-bold">${tool.name}</h1>
+                        <div class="flex items-center gap-2 mt-2"><span class="px-2 py-1 text-xs rounded font-semibold ${colors}">${tool.type}</span>${keywords}</div>
+                        <p class="mt-4 text-gray-500">由 <strong>${tool.author_name}</strong> (${tool.department || ''}) 提供</p>
+                    </div>
+                    <div class="flex-shrink-0 mt-4 md:mt-0">
+                        <div class="text-right">
+                            <p class="text-gray-500">累计下载/调用</p>
+                            <p class="text-4xl font-bold text-indigo-500">${tool.downloads + (tool.calls || 0)}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2 space-y-8">
+                        <div class="bg-white rounded-lg shadow-md p-6">
+                            <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><i class="fas fa-tools"></i>工具使用</h2>
+                            <div class="mb-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">输入工作内容</label>
+                                <textarea id="work-content-input" class="w-full border border-gray-300 rounded-lg p-4 resize-none" rows="8" placeholder="请输入本周工作内容，每行一项...&#10;&#10;例如：&#10;- 完成项目需求分析&#10;- 编写技术文档&#10;- 修复线上bug"></textarea>
+                                <button onclick="submitWorkContent(${tool.id})" class="mt-3 w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+                                    <i class="fas fa-magic"></i> 生成周报
+                                </button>
+                            </div>
+                            <div class="border-t border-gray-200 pt-4">
+                                <p class="text-sm text-gray-500 mb-3">或使用文件方式：</p>
+                                <div class="border rounded-lg p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                    <button onclick="downloadTemplate(${tool.id})" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+                                        <i class="fas fa-download"></i> 下载模板
+                                    </button>
+                                    <div class="text-center text-gray-400">&rarr;</div>
+                                    <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
+                                        <i class="fas fa-upload"></i> 上传文件处理
+                                        <input type="file" class="sr-only" onchange="uploadFile(${tool.id}, this)" accept=".xlsx,.csv,.json,.zip,.py,.sh,.bat,.txt,.xls">
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="upload-progress" class="mt-4 hidden">
+                                <p class="text-sm font-medium mb-1">处理进度</p>
+                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div id="progress-bar" class="bg-green-500 h-2.5 rounded-full progress-bar" style="width: 0%"></div>
+                                </div>
+                                <p id="progress-text" class="text-xs text-gray-500 mt-1">文件处理中...</p>
+                            </div>
+                            <div id="upload-result" class="mt-6 border-t border-gray-100 pt-4 hidden">
+                                <p class="font-semibold mb-2">结果产出</p>
+                                <a id="result-link" href="#" class="text-indigo-500 hover:underline flex items-center gap-2">
+                                    <i class="fas fa-file-excel"></i><span id="result-name">处理结果 (点击下载)</span>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-md p-6">
+                            <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><i class="fas fa-info-circle"></i>功能介绍与使用说明</h2>
+                            <div class="prose max-w-none">
+                                <p>${tool.description || ''}</p>
+                                <div class="mt-4 whitespace-pre-wrap text-gray-600">${instructions}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-8">
+                        <div class="bg-white rounded-lg shadow-md p-6">
+                            <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fas fa-chart-line"></i>下载趋势</h3>
+                            <canvas id="downloadsChart"></canvas>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-md p-6">
+                            <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fas fa-envelope"></i>联系方式</h3>
+                            <div class="space-y-2 text-sm">
+                                <p><strong>邮箱:</strong> <a href="mailto:${tool.contact_email || 'author@example.com'}" class="text-indigo-500">${tool.contact_email || 'author@example.com'}</a></p>
+                                <p><strong>手机号:</strong> ${tool.contact_phone || '未提供'}</p>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-md p-6">
+                            <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fas fa-comments"></i>用户评价 (${(tool.reviews || []).length})</h3>
+                            <div class="space-y-4">
+                                ${reviews || '<p class="text-gray-400 text-sm">暂无评价</p>'}
+                                <textarea id="review-input" class="w-full mt-4 bg-gray-100 border-none rounded-lg p-2" rows="2" placeholder="写下您的评价..."></textarea>
+                                <button onclick="submitReview(${tool.id})" class="w-full mt-2 bg-indigo-500 text-white font-semibold py-2 rounded-lg hover:bg-indigo-600 flex items-center justify-center gap-2"><i class="fas fa-paper-plane"></i>提交评价</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        } catch(e) {
+            return `<div class="page"><p class="text-red-500">加载失败: ${e.message}</p></div>`;
+        }
+    }
+
+    async function renderProfilePage() {
+        if (!currentUser) return '<div class="page"><p class="text-red-500">请先登录</p></div>';
+        try {
+            const u = await api('/api/auth/me');
+            return `
+            <div class="page">
+                <h1 class="text-3xl font-bold mb-6">个人中心</h1>
+                <div class="bg-white rounded-lg shadow-md p-8 max-w-2xl mx-auto">
+                    <form class="space-y-6" onsubmit="saveProfile(event)">
+                        <div class="flex items-center gap-4">
+                            <div class="w-20 h-20 rounded-full bg-indigo-600 text-white flex items-center justify-center text-3xl font-bold">${(u.nickname || u.username || 'U').charAt(0).toUpperCase()}</div>
+                            <div><h2 class="text-2xl font-bold">${u.nickname || u.username}</h2><p class="text-gray-500">用户ID: ${u.id}</p></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-user"></i>昵称</label>
+                                <input type="text" id="pf-nickname" value="${u.nickname || ''}" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                            <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-building"></i>公司</label>
+                                <input type="text" id="pf-company" value="${u.company || ''}" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                        </div>
+                        <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-building"></i>部门</label>
+                            <input type="text" id="pf-department" value="${u.department || ''}" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-file-alt"></i>个人简介</label>
+                            <textarea id="pf-bio" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0" rows="3">${u.bio || ''}</textarea></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-envelope"></i>邮箱</label>
+                                <input type="email" id="pf-email" value="${u.email || ''}" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                            <div><label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-phone"></i>手机号</label>
+                                <input type="tel" id="pf-phone" value="${u.phone || ''}" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                        </div>
+                        <div class="border-t border-gray-200 pt-6">
+                            <label class="block text-sm font-medium text-gray-700 flex items-center gap-2"><i class="fas fa-lock"></i>修改密码 (留空不修改)</label>
+                            <input type="password" id="pf-password" placeholder="输入新密码" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                        </div>
+                        <div class="text-right">
+                            <button type="submit" class="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2"><i class="fas fa-save"></i>保存修改</button>
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+        } catch(e) { return `<div class="page"><p class="text-red-500">${e.message}</p></div>`; }
+    }
+
+    async function saveProfile(e) {
+        e.preventDefault();
+        try {
+            const body = {
+                nickname: document.getElementById('pf-nickname').value,
+                company: document.getElementById('pf-company').value,
+                department: document.getElementById('pf-department').value,
+                bio: document.getElementById('pf-bio').value,
+                email: document.getElementById('pf-email').value,
+                phone: document.getElementById('pf-phone').value,
+            };
+            const pw = document.getElementById('pf-password').value;
+            if (pw) body.password = pw;
+            await api('/api/auth/update_profile', { method: 'PUT', json: body });
+            const u = await api('/api/auth/me');
+            currentUser = u;
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            document.getElementById('avatar-circle').textContent = (u.nickname || u.username || 'U').charAt(0).toUpperCase();
+            showToast('保存成功');
+        } catch(err) { showToast(err.message, 'error'); }
+    }
+
+    async function renderManagePage() {
+        try {
+            const data = await api('/api/tools/my');
+            const rows = (data.tools || []).map(tool => `
+                <tr>
+                    <td class="p-4">${tool.name}</td>
+                    <td class="p-4">${tool.type}</td>
+                    <td class="p-4">${tool.downloads + (tool.calls||0)}</td>
+                    <td class="p-4"><span class="px-2 py-1 text-xs rounded-full ${tool.status === 'online' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${tool.status === 'online' ? '在线' : '已下线'}</span></td>
+                    <td class="p-4 space-x-2">
+                        <button onclick='editTool(${JSON.stringify(tool).replace(/'/g,"\\'")})' class="text-indigo-500 hover:underline inline-flex items-center gap-1"><i class="fas fa-edit"></i>修改</button>
+                        <button onclick="offlineTool(${tool.id})" class="text-red-500 hover:underline inline-flex items-center gap-1"><i class="fas fa-arrow-down"></i>下线</button>
+                        <button onclick="switchPage('detail', ${tool.id})" class="text-gray-500 hover:underline inline-flex items-center gap-1"><i class="fas fa-chart-pie"></i>统计</button>
+                    </td>
+                </tr>`).join('');
+            return `
+            <div class="page">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold">工具管理</h1>
+                    <button class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center gap-2" onclick="switchPage('uploadTool')">
+                        <i class="fas fa-plus"></i> 上传新工具
+                    </button>
+                </div>
+                <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50"><tr><th class="p-4 font-semibold">工具名称</th><th class="p-4 font-semibold">类型</th><th class="p-4 font-semibold">下载量</th><th class="p-4 font-semibold">状态</th><th class="p-4 font-semibold">操作</th></tr></thead>
+                        <tbody class="divide-y divide-gray-200">${rows || '<tr><td colspan="5" class="p-4 text-center text-gray-400">暂无工具</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        } catch(e) { return `<div class="page"><p class="text-red-500">${e.message}</p></div>`; }
+    }
+
+    function renderUploadToolPage() {
+        return `
+        <div class="page">
+            <h1 class="text-3xl font-bold mb-6">上传新工具</h1>
+            <div class="bg-white rounded-lg shadow-md p-8 max-w-2xl mx-auto">
+                <form class="space-y-6" onsubmit="submitNewTool(event)">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">工具名称</label>
+                        <input type="text" id="new-tool-name" required placeholder="例如：项目周报自动生成器" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">工具分类</label>
+                            <select id="new-tool-category" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                                <option>规划</option><option>建设</option><option>优化</option><option>维护</option><option>客服</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">工具类型</label>
+                            <select id="new-tool-type" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                                <option value="excel">Excel (VBA)</option><option value="python">Python</option><option value="bat">Bat</option><option value="bash">Bash</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">关键字</label>
+                        <input type="text" id="new-tool-keywords" placeholder="多个关键字用逗号分隔" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">所属部门</label>
+                        <input type="text" id="new-tool-dept" placeholder="例如：研发部" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">功能介绍</label>
+                        <textarea id="new-tool-desc" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0" rows="4" placeholder="详细描述工具的功能、使用方法等。"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">使用说明</label>
+                        <textarea id="new-tool-instructions" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0" rows="3" placeholder="图文/视频使用说明"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div><label class="block text-sm font-medium text-gray-700">联系邮箱</label>
+                            <input type="email" id="new-tool-email" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                        <div><label class="block text-sm font-medium text-gray-700">联系电话</label>
+                            <input type="tel" id="new-tool-phone" class="mt-1 block w-full rounded-md bg-gray-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-0"></div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">上传模板文件</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                            <div class="space-y-1 text-center">
+                                <i class="fas fa-cloud-upload-alt text-4xl text-gray-400"></i>
+                                <div class="flex text-sm text-gray-600">
+                                    <label class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500">
+                                        <span id="file-label">选择一个文件</span>
+                                        <input id="new-tool-file" type="file" class="sr-only" onchange="document.getElementById('file-label').textContent=this.files[0]?.name||'选择一个文件'" accept=".xlsx,.csv,.json,.zip,.py,.sh,.bat,.txt,.xls">
+                                    </label>
+                                    <p class="pl-1">或拖拽到这里</p>
+                                </div>
+                                <p class="text-xs text-gray-500">支持 .py, .sh, .xlsx, .zip 等</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" class="bg-indigo-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-indigo-700 inline-flex items-center gap-2"><i class="fas fa-check-circle"></i>提交审核</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
+    }
+
+    async function submitNewTool(e) {
+        e.preventDefault();
+        const fd = new FormData();
+        fd.append('name', document.getElementById('new-tool-name').value);
+        fd.append('category', document.getElementById('new-tool-category').value);
+        fd.append('type', document.getElementById('new-tool-type').value);
+        fd.append('keywords', document.getElementById('new-tool-keywords').value);
+        fd.append('department', document.getElementById('new-tool-dept').value);
+        fd.append('description', document.getElementById('new-tool-desc').value);
+        fd.append('instructions', document.getElementById('new-tool-instructions').value);
+        fd.append('contact_email', document.getElementById('new-tool-email').value);
+        fd.append('contact_phone', document.getElementById('new-tool-phone').value);
+        const file = document.getElementById('new-tool-file').files[0];
+        if (file) fd.append('template_file', file);
+        try {
+            await api('/api/tools/create', { method: 'POST', body: fd });
+            showToast('工具创建成功');
+            switchPage('manage');
+        } catch(err) { showToast(err.message, 'error'); }
+    }
+
+    async function renderMessagesPage() {
+        try {
+            const data = await api('/api/messages');
+            const msgs = (data.messages || []).map(msg => `
+                <li class="p-4 flex justify-between items-center hover:bg-gray-50 cursor-pointer" onclick="showMessageDetail(${msg.id}, '${msg.type}', '${(msg.title||'').replace(/'/g,"\\'")}', '${(msg.content||'').replace(/'/g,"\\'")}', '${(msg.from_user||'').replace(/'/g,"\\'")}', '${msg.status}', '${msg.created_at||''}', '${(msg.reply_content||'').replace(/'/g,"\\'")}')">
+                    <div class="flex items-center gap-4">
+                        ${msg.status === '未读' ? '<div class="w-2.5 h-2.5 bg-indigo-500 rounded-full"></div>' : '<div class="w-2.5 h-2.5"></div>'}
+                        <div>
+                            <span class="px-2 py-0.5 text-xs rounded font-medium ${msg.type === '问题反馈' ? 'bg-yellow-100 text-yellow-800' : msg.type === '问题答复' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}">${msg.type}</span>
+                            <p class="font-semibold mt-1">${msg.title}</p>
+                            <p class="text-sm text-gray-500">来自: ${msg.from_user}</p>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-400">${msg.created_at || ''}</div>
+                </li>`).join('');
+            return `
+            <div class="page">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold">消息中心</h1>
+                    <button onclick="showFeedbackForm()" class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center gap-2">
+                        <i class="fas fa-plus"></i> 问题反馈
+                    </button>
+                </div>
+                <div id="feedback-form-container"></div>
+                <div class="bg-white rounded-lg shadow-md">
+                    <ul class="divide-y divide-gray-200">${msgs || '<li class="p-4 text-center text-gray-400">暂无消息</li>'}</ul>
+                </div>
+            </div>`;
+        } catch(e) { return `<div class="page"><p class="text-red-500">${e.message}</p></div>`; }
+    }
+
+    async function showMessageDetail(id, type, title, content, from, status, date, reply) {
+        if (status === '未读') {
+            try { await api(`/api/messages/${id}/read`, { method: 'POST' }); loadUnreadCount(); } catch(e) {}
+        }
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        let replyHtml = '';
+        if (type === '问题反馈' && (currentUser?.role === 'admin' || currentUser?.role === 'author')) {
+            replyHtml = `<div class="mt-4 border-t pt-4"><textarea id="reply-content" class="w-full border rounded-lg p-2" rows="2" placeholder="输入回复内容..."></textarea>
+                <button onclick="replyMessage(${id})" class="mt-2 bg-indigo-500 text-white px-4 py-2 rounded-lg">发送回复</button></div>`;
+        }
+        if (reply) {
+            replyHtml += `<div class="mt-4 bg-gray-50 p-3 rounded"><p class="text-sm font-semibold text-gray-600">回复:</p><p class="text-sm">${reply}</p></div>`;
+        }
+        modal.innerHTML = `<div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold">${title}</h2><button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button></div>
+            <span class="px-2 py-0.5 text-xs rounded font-medium ${type === '问题反馈' ? 'bg-yellow-100 text-yellow-800' : type === '问题答复' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}">${type}</span>
+            <p class="text-gray-500 text-sm mt-2">来自: ${from} | ${date}</p>
+            <p class="mt-4">${content || '无内容'}</p>
+            ${replyHtml}
+        </div>`;
+        document.body.appendChild(modal);
+    }
+
+    async function replyMessage(msgId) {
+        const content = document.getElementById('reply-content')?.value?.trim();
+        if (!content) return showToast('请输入回复内容', 'error');
+        try {
+            await api(`/api/messages/${msgId}/reply`, { method: 'POST', json: { reply: content } });
+            showToast('回复成功');
+            document.querySelector('.fixed')?.remove();
+            switchPage('messages');
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    function showFeedbackForm() {
+        const container = document.getElementById('feedback-form-container');
+        container.innerHTML = `
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 class="font-bold mb-4">提交问题反馈</h3>
+            <input id="fb-title" class="w-full border rounded-lg px-3 py-2 mb-3" placeholder="标题">
+            <textarea id="fb-content" class="w-full border rounded-lg px-3 py-2 mb-3" rows="3" placeholder="详细描述您遇到的问题..."></textarea>
+            <div class="flex gap-2">
+                <button onclick="submitFeedback()" class="bg-indigo-500 text-white px-4 py-2 rounded-lg">提交</button>
+                <button onclick="document.getElementById('feedback-form-container').innerHTML=''" class="bg-gray-200 px-4 py-2 rounded-lg">取消</button>
+            </div>
+        </div>`;
+    }
+
+    async function submitFeedback() {
+        const title = document.getElementById('fb-title')?.value?.trim();
+        const content = document.getElementById('fb-content')?.value?.trim();
+        if (!title || !content) return showToast('请填写标题和内容', 'error');
+        try {
+            await api('/api/messages/create', { method: 'POST', json: { type: '问题反馈', title, content } });
+            showToast('反馈已提交');
+            document.getElementById('feedback-form-container').innerHTML = '';
+            switchPage('messages');
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function downloadTemplate(toolId) {
+        if (!authToken) return showToast('请先登录', 'error');
+        try {
+            const res = await fetch(`${API_BASE}/api/tools/${toolId}/download_template`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            const blob = await res.blob();
+            const disposition = res.headers.get('Content-Disposition');
+            let filename = 'template';
+            if (disposition) { const m = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/); if (m) filename = m[1].replace(/['"]/g, ''); }
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast('模板下载成功');
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function uploadFile(toolId, input) {
+        if (!authToken) return showToast('请先登录', 'error');
+        const file = input.files[0];
+        if (!file) return;
+        const progress = document.getElementById('upload-progress');
+        const bar = document.getElementById('progress-bar');
+        const text = document.getElementById('progress-text');
+        const result = document.getElementById('upload-result');
+        progress.classList.remove('hidden');
+        result.classList.add('hidden');
+        bar.style.width = '30%';
+        text.textContent = '文件上传中...';
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            bar.style.width = '60%';
+            text.textContent = '处理中...';
+            const data = await api(`/api/tools/${toolId}/upload`, { method: 'POST', body: fd });
+            bar.style.width = '100%';
+            text.textContent = '处理完成！';
+            result.classList.remove('hidden');
+            document.getElementById('result-name').textContent = data.result_file + ' (点击下载)';
+            document.getElementById('result-link').href = `${API_BASE}/api/files/download/${data.result_file}`;
+            document.getElementById('result-link').onclick = function(e) {
+                e.preventDefault();
+                downloadResultFile(data.result_file);
+            };
+            showToast('文件处理完成');
+        } catch(e) {
+            bar.style.width = '100%';
+            bar.className = 'bg-red-500 h-2.5 rounded-full progress-bar';
+            text.textContent = '处理失败: ' + e.message;
+            showToast(e.message, 'error');
+        }
+        input.value = '';
+    }
+
+    async function downloadResultFile(filename) {
+        try {
+            const res = await fetch(`${API_BASE}/api/files/download/${filename}`, {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (!res.ok) throw new Error('下载失败');
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function submitWorkContent(toolId) {
+        if (!authToken) return showToast('请先登录', 'error');
+        const content = document.getElementById('work-content-input')?.value?.trim();
+        if (!content) return showToast('请输入工作内容', 'error');
+        
+        const progress = document.getElementById('upload-progress');
+        const bar = document.getElementById('progress-bar');
+        const text = document.getElementById('progress-text');
+        const result = document.getElementById('upload-result');
+        
+        progress.classList.remove('hidden');
+        result.classList.add('hidden');
+        bar.style.width = '30%';
+        bar.className = 'bg-green-500 h-2.5 rounded-full progress-bar';
+        text.textContent = '处理中...';
+        
+        try {
+            const fd = new FormData();
+            fd.append('file', new Blob([content], { type: 'text/plain' }), 'work_content.txt');
+            bar.style.width = '70%';
+            text.textContent = '生成周报中...';
+            
+            const data = await api(`/api/tools/${toolId}/upload`, { method: 'POST', body: fd });
+            bar.style.width = '100%';
+            text.textContent = '生成完成！';
+            
+            result.classList.remove('hidden');
+            document.getElementById('result-name').textContent = data.result_file + ' (点击下载)';
+            document.getElementById('result-link').href = `${API_BASE}/api/files/download/${data.result_file}`;
+            document.getElementById('result-link').onclick = function(e) {
+                e.preventDefault();
+                downloadResultFile(data.result_file);
+            };
+            showToast('周报生成完成');
+        } catch(e) {
+            bar.style.width = '100%';
+            bar.className = 'bg-red-500 h-2.5 rounded-full progress-bar';
+            text.textContent = '处理失败: ' + e.message;
+            showToast(e.message, 'error');
+        }
+    }
+
+    async function submitReview(toolId) {
+        if (!authToken) return showToast('请先登录', 'error');
+        const content = document.getElementById('review-input')?.value?.trim();
+        if (!content) return showToast('请输入评价内容', 'error');
+        try {
+            await api('/api/reviews', { method: 'POST', json: { tool_id: toolId, content } });
+            showToast('评价提交成功');
+            switchPage('detail', toolId);
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function offlineTool(toolId) {
+        if (!confirm('确认下线此工具？')) return;
+        try {
+            await api(`/api/tools/${toolId}/offline`, { method: 'POST' });
+            showToast('工具已下线');
+            switchPage('manage');
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    function editTool(tool) {
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        modal.innerHTML = `<div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4">修改工具</h2>
+            <form onsubmit="submitEditTool(event, ${tool.id})" class="space-y-3">
+                <input id="ed-name" value="${tool.name}" class="w-full border rounded-lg px-3 py-2" placeholder="工具名称">
+                <select id="ed-category" class="w-full border rounded-lg px-3 py-2">
+                    ${['规划','建设','优化','维护','客服'].map(c => `<option ${tool.category===c?'selected':''}>${c}</option>`).join('')}
+                </select>
+                <input id="ed-keywords" value="${tool.keywords||''}" class="w-full border rounded-lg px-3 py-2" placeholder="关键字">
+                <input id="ed-dept" value="${tool.department||''}" class="w-full border rounded-lg px-3 py-2" placeholder="部门">
+                <textarea id="ed-desc" class="w-full border rounded-lg px-3 py-2" rows="3" placeholder="描述">${tool.description||''}</textarea>
+                <input id="ed-email" value="${tool.contact_email||''}" class="w-full border rounded-lg px-3 py-2" placeholder="联系邮箱">
+                <input id="ed-phone" value="${tool.contact_phone||''}" class="w-full border rounded-lg px-3 py-2" placeholder="联系电话">
+                <div class="flex gap-2">
+                    <button type="submit" class="bg-indigo-500 text-white px-4 py-2 rounded-lg">保存</button>
+                    <button type="button" onclick="this.closest('.fixed').remove()" class="bg-gray-200 px-4 py-2 rounded-lg">取消</button>
+                </div>
+            </form>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+
+    async function submitEditTool(e, toolId) {
+        e.preventDefault();
+        try {
+            await api(`/api/tools/${toolId}/update`, { method: 'PUT', json: {
+                name: document.getElementById('ed-name').value,
+                category: document.getElementById('ed-category').value,
+                keywords: document.getElementById('ed-keywords').value,
+                department: document.getElementById('ed-dept').value,
+                description: document.getElementById('ed-desc').value,
+                contact_email: document.getElementById('ed-email').value,
+                contact_phone: document.getElementById('ed-phone').value
+            }});
+            showToast('修改成功');
+            document.querySelector('.fixed')?.remove();
+            switchPage('manage');
+        } catch(e) { showToast(e.message, 'error'); }
+    }
+
+    async function initDetailChart(toolId) {
+        try {
+            const data = await api(`/api/stats/tool/${toolId}`);
+            const ctx = document.getElementById('downloadsChart');
+            if (!ctx) return;
+            if (downloadsChartInstance) downloadsChartInstance.destroy();
+            const trend = data.trend || [];
+            downloadsChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: trend.map(t => t.date.substring(5)),
+                    datasets: [{
+                        label: '下载/调用次数',
+                        data: trend.map(t => t.count),
+                        fill: true, backgroundColor: 'rgba(79,70,229,0.1)', borderColor: 'rgb(79,70,229)', tension: 0.3
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
+        } catch(e) {}
+    }
+
+    function goBack() {
+        if (pageHistory.length > 0) {
+            const prev = pageHistory.pop();
+            currentPage = prev.pageId;
+            currentParam = prev.param;
+            switchPage(prev.pageId, prev.param, true);
+        } else {
+            switchPage('home', null, true);
+        }
+    }
+
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    async function switchPage(pageId, param, fromBack) {
+        if (!fromBack) {
+            pageHistory.push({ pageId: currentPage, param: currentParam });
+        }
+        currentPage = pageId;
+        currentParam = param;
+        navLinks.forEach(link => {
+            const linkPage = link.getAttribute('href')?.substring(1);
+            if (pageId === 'category' && ['planning','construction','maintenance','optimization','operation'].includes(linkPage)) {
+                link.classList.toggle('active', link.innerText.trim() === param);
+            } else if (['search','detail','uploadTool','profile','manage','messages'].includes(pageId)) {
+                link.classList.remove('active');
+            } else {
+                link.classList.toggle('active', linkPage === pageId);
+            }
+        });
+        const container = document.getElementById('page-container');
+        container.innerHTML = '<div class="flex justify-center items-center py-20"><div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div></div>';
+
+        let html = '';
+        switch(pageId) {
+            case 'home': html = await renderHomePage(); break;
+            case 'category': html = await renderCategoryPage(param); break;
+            case 'search': html = await renderSearchPage(param); break;
+            case 'detail': html = await renderDetailPage(param); break;
+            case 'profile': html = await renderProfilePage(); break;
+            case 'manage': html = await renderManagePage(); break;
+            case 'uploadTool': html = renderUploadToolPage(); break;
+            case 'messages': html = await renderMessagesPage(); break;
+            default: html = await renderHomePage();
+        }
+        container.innerHTML = html;
+        if (pageId === 'detail') setTimeout(() => initDetailChart(param), 100);
+        loadUnreadCount();
+    }
+
+    function performSearch() {
+        const q = document.getElementById('searchInput').value.trim();
+        if (q) switchPage('search', q);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (authToken && currentUser) { initApp(); }
+        else { document.getElementById('login-page').style.display = 'flex'; }
+
+        const userMenuButton = document.getElementById('user-menu-button');
+        const userMenu = document.getElementById('user-menu');
+        userMenuButton.addEventListener('click', (e) => { e.stopPropagation(); userMenu.classList.toggle('hidden'); });
+        document.addEventListener('click', () => userMenu.classList.add('hidden'));
+
+        document.getElementById('searchInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch(); });
+    });
+    </script>
+</body>
+</html>

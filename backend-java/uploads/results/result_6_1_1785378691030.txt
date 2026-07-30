@@ -1,0 +1,6 @@
+===== Python文件: test_enc.py =====
+stdout encoding: gbk
+=== ���Ĳ��� ===
+������磡
+
+
