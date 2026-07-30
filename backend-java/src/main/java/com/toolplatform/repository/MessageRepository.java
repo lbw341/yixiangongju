@@ -1,6 +1,6 @@
 package com.toolplatform.repository;
 
-import com.toolplatform.model.Message;
+import com.toolplatform.entity.Message;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 

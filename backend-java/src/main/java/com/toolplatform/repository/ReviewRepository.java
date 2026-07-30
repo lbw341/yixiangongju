@@ -1,6 +1,6 @@
 package com.toolplatform.repository;
 
-import com.toolplatform.model.Review;
+import com.toolplatform.entity.Review;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 

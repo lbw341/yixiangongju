@@ -1,4 +1,0 @@
-===== Python文件: main.py =====
-错误：文件夹 'C:\Users\Administrator\AppData\Local\Temp\python_work_12668364427867402396\中兴4G性能管理.xlsx' 不存在。
-
-

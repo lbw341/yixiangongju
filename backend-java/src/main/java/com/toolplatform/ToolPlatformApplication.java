@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import com.toolplatform.model.*;
+import com.toolplatform.entity.*;
 import com.toolplatform.repository.*;
 
 @SpringBootApplication

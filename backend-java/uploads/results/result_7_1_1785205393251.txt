@@ -1,8 +1,0 @@
-===== Python文件: test.py =====
-Python版本: 3.11.4 (tags/v3.11.4:d2340ef, Jun  7 2023, 05:45:37) [MSC v.1934 64 bit (AMD64)]
-pandas版本: 3.0.5
-正则表达式测试成功
-CSV读取失败: [Errno 2] No such file or directory: 'test_folder/school_list.csv'
-脚本运行完成
-
-

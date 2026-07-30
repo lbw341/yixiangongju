@@ -1,6 +1,6 @@
 package com.toolplatform.repository;
 
-import com.toolplatform.model.UserToolUsage;
+import com.toolplatform.entity.UserToolUsage;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;

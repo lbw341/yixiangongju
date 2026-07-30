@@ -1,9 +1,0 @@
-===== Python文件: hello.py =====
-=== 文件夹传递测试 ===
-从 sys.argv[1] 获取目录: C:\Users\Administrator\AppData\Local\Temp\python_work_2341327981754521027\data
-目录存在: True
-目录内容:
-  - 数据文件.txt (文件: True, 大小: 43 bytes)
-=== 测试完成 ===
-
-

@@ -1,7 +1,7 @@
 package com.toolplatform.controller;
 
-import com.toolplatform.model.Review;
-import com.toolplatform.model.User;
+import com.toolplatform.entity.Review;
+import com.toolplatform.entity.User;
 import com.toolplatform.repository.ReviewRepository;
 import com.toolplatform.repository.UserRepository;
 import com.toolplatform.util.JwtUtil;
@@ -12,7 +12,8 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reviews")
-public class ReviewController {
+public class ReviewController extends BaseController {
+
     private final ReviewRepository reviewRepo;
     private final UserRepository userRepo;
     private final JwtUtil jwtUtil;
@@ -23,15 +24,21 @@ public class ReviewController {
         this.jwtUtil = jwtUtil;
     }
 
+    @Override
+    protected UserRepository getUserRepo() { return userRepo; }
+
+    @Override
+    protected JwtUtil getJwtUtil() { return jwtUtil; }
+
     @PostMapping("")
     public ResponseEntity<?> createReview(HttpServletRequest request, @RequestBody Map<String, Object> body) {
         User u = getCurrentUser(request);
-        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+        if (u == null) return unauthorized();
 
         Object toolIdObj = body.get("tool_id");
         String content = (String) body.getOrDefault("content", "");
         if (toolIdObj == null || content.trim().isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "工具ID和评价内容不能为空"));
+            return badRequest("工具ID和评价内容不能为空");
         }
 
         Review r = new Review();
@@ -41,13 +48,5 @@ public class ReviewController {
         r.setContent(content.trim());
         reviewRepo.save(r);
         return ResponseEntity.status(201).body(Map.of("message", "评价提交成功"));
-    }
-
-    private User getCurrentUser(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) return null;
-        String token = header.substring(7);
-        if (!jwtUtil.validateToken(token)) return null;
-        return userRepo.findById(jwtUtil.getUserIdFromToken(token)).orElse(null);
     }
 }

@@ -1,8 +1,0 @@
-===== Python文件: hello.py =====
-Hello from ZIP!
-Testing Python execution in ZIP archive
-Number: 1
-Number: 2
-Number: 3
-
-

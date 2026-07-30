@@ -1,6 +1,6 @@
 package com.toolplatform.controller;
 
-import com.toolplatform.model.User;
+import com.toolplatform.entity.User;
 import com.toolplatform.repository.UserRepository;
 import com.toolplatform.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,7 +20,8 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/files")
-public class FileController {
+public class FileController extends BaseController {
+
     private final UserRepository userRepo;
     private final JwtUtil jwtUtil;
 
@@ -32,15 +33,21 @@ public class FileController {
         this.jwtUtil = jwtUtil;
     }
 
+    @Override
+    protected UserRepository getUserRepo() { return userRepo; }
+
+    @Override
+    protected JwtUtil getJwtUtil() { return jwtUtil; }
+
     @GetMapping("/download/{filename}")
     public ResponseEntity<?> downloadFile(@PathVariable String filename, HttpServletRequest request) {
         User u = getCurrentUser(request);
-        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+        if (u == null) return unauthorized();
 
         Path filePath = Paths.get(resultDir, filename);
         File file = filePath.toFile();
         if (!file.exists()) {
-            return ResponseEntity.status(404).body(Map.of("error", "文件不存在"));
+            return notFound("文件不存在");
         }
 
         Resource resource = new FileSystemResource(file);
@@ -61,12 +68,12 @@ public class FileController {
     @GetMapping("/preview/{filename}")
     public ResponseEntity<?> previewFile(@PathVariable String filename, HttpServletRequest request) {
         User u = getCurrentUser(request);
-        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+        if (u == null) return unauthorized();
 
         Path filePath = Paths.get(resultDir, filename);
         File file = filePath.toFile();
         if (!file.exists()) {
-            return ResponseEntity.status(404).body(Map.of("error", "文件不存在"));
+            return notFound("文件不存在");
         }
 
         try {
@@ -75,18 +82,10 @@ public class FileController {
                 String content = Files.readString(filePath, StandardCharsets.UTF_8);
                 return ResponseEntity.ok(Map.of("content", content, "filename", filename));
             } else {
-                return ResponseEntity.status(400).body(Map.of("error", "不支持预览该文件类型，仅支持文本文件(.txt, .log, .md, .csv)"));
+                return badRequest("不支持预览该文件类型，仅支持文本文件(.txt, .log, .md, .csv)");
             }
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "预览失败: " + e.getMessage()));
         }
-    }
-
-    private User getCurrentUser(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) return null;
-        String token = header.substring(7);
-        if (!jwtUtil.validateToken(token)) return null;
-        return userRepo.findById(jwtUtil.getUserIdFromToken(token)).orElse(null);
     }
 }

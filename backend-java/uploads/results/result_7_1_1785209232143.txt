@@ -1,4 +1,0 @@
-===== Python文件: main.py =====
-错误：文件夹 'C:\Users\Administrator\AppData\Local\Temp\python_work_10241831231058880302\data___4G____.xlsx' 不存在。
-
-
