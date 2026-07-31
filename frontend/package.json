@@ -1,0 +1,21 @@
+{
+  "name": "tool-platform-frontend",
+  "version": "1.0.0",
+  "description": "一线工具平台 - 专业的项目周报生成器和技术文档生成工具",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0",
+    "pinia": "^2.1.0",
+    "chart.js": "^4.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.2.0"
+  }
+}

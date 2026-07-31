@@ -1,4 +1,4 @@
-# 一线工具平台 - 系统部署说明
+# Tool Platform - 系统部署说明
 
 ## 一、环境要求
 
@@ -16,7 +16,9 @@
 |------|---------|------|
 | 操作系统 | Windows 10/11 或 Linux (Ubuntu 20.04+) | 支持 Win/Linux |
 | JDK | **21** (LTS) | 必须使用 Java 21 |
-| Maven | 3.8+ | 用于构建项目 |
+| Maven | 3.8+ | 用于构建后端项目 |
+| Node.js | **18+** | 用于构建前端项目（Vite） |
+| npm | 9+ | 前端包管理器 |
 | MySQL | 8.0+ | 数据库 |
 | Python | 3.8+ | 用于执行用户上传的 Python 代码 |
 | Git | 2.30+ | 用于版本控制（可选） |
@@ -54,7 +56,31 @@ sudo apt install openjdk-21-jdk -y
 java -version
 ```
 
-### 2.2 安装 Maven
+### 2.2 安装 Node.js 18+
+
+#### Windows 环境
+
+1. 下载 Node.js：访问 [Node.js 官网](https://nodejs.org/)
+2. 推荐安装 LTS 版本（18.x 或 20.x）
+3. 安装后自动配置环境变量
+4. 验证安装：
+   ```bash
+   node -v
+   npm -v
+   ```
+
+#### Linux 环境
+
+```bash
+# 使用 NodeSource 仓库安装
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install nodejs -y
+# 验证
+node -v
+npm -v
+```
+
+### 2.3 安装 Maven
 
 #### Windows 环境
 
@@ -74,7 +100,7 @@ sudo apt install maven -y
 mvn -version
 ```
 
-### 2.3 安装 MySQL 8.0
+### 2.4 安装 MySQL 8.0
 
 #### Windows 环境
 
@@ -107,7 +133,7 @@ GRANT ALL PRIVILEGES ON tooldb.* TO 'tooluser'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-### 2.4 安装 Python 3.x
+### 2.5 安装 Python 3.x
 
 #### Windows 环境
 
@@ -141,28 +167,51 @@ cd tool-platform
 
 ```
 tool-platform/
-├── backend-java/              # 后端 Java 项目
+├── backend-java/              # 后端 Spring Boot 项目
 │   ├── src/
 │   │   └── main/
 │   │       ├── java/         # Java 源码
 │   │       │   └── com/toolplatform/
-│   │       └── resources/    # 配置文件和前端文件
+│   │       │       ├── controller/   # 控制器层
+│   │       │       ├── service/      # 业务层
+│   │       │       ├── repository/   # 数据访问层
+│   │       │       ├── entity/       # 实体类
+│   │       │       └── config/       # 配置类
+│   │       └── resources/
 │   │           ├── application.properties
-│   │           └── static/  # 前端页面
+│   │           └── static/  # 前端构建产物（自动生成）
 │   ├── data/                  # 数据库文件目录
 │   ├── uploads/               # 用户上传文件存储
-│   ├── app.log                # 运行日志（启动后生成）
 │   └── pom.xml                # Maven 配置
-├── frontend/                  # 前端源码（参考用）
+├── frontend/                  # 前端 Vue 3 项目
+│   ├── src/
+│   │   ├── api/               # API 接口封装
+│   │   ├── components/        # 公共组件
+│   │   ├── composables/       # 组合式函数
+│   │   ├── router/            # Vue Router 路由配置
+│   │   ├── store/             # Pinia 状态管理
+│   │   ├── styles/            # 全局样式
+│   │   ├── views/             # 页面组件
+│   │   │   ├── Home/          # 首页
+│   │   │   ├── Login/         # 登录注册
+│   │   │   ├── Detail/        # 工具详情
+│   │   │   ├── Category/      # 分类页
+│   │   │   ├── Profile/       # 个人中心
+│   │   │   ├── Manage/        # 工具管理
+│   │   │   ├── Messages/      # 消息中心
+│   │   │   ├── ToolList/      # 全部工具
+│   │   │   ├── Feedback/      # 反馈评价
+│   │   │   └── Layout/        # 布局组件
+│   │   ├── App.vue            # 根组件
+│   │   └── main.js            # 入口文件
+│   ├── index.html
+│   ├── vite.config.js
+│   └── package.json
 ├── database/                  # 数据库脚本
 ├── docs/                      # 文档
 │   └── DEPLOY.md              # 本部署文档
-├── scripts/                   # 辅助脚本
-├── start.bat                  # ⭐ Windows 启动器
-├── stop.bat                   # ⭐ Windows 停止器
-├── console.bat                # ⭐ Windows 控制台菜单
-├── start.sh                   # ⭐ Linux 启动器
-└── stop.sh                    # ⭐ Linux 停止器
+├── start.bat                  # ⭐ 一键启动（双击即可）
+└── README.md
 ```
 
 ### 3.3 配置文件说明
@@ -170,6 +219,9 @@ tool-platform/
 编辑 `backend-java/src/main/resources/application.properties`：
 
 ```properties
+# 服务器端口
+server.port=5000
+
 # 数据库连接（根据实际环境修改）
 spring.datasource.url=jdbc:mysql://localhost:3306/tooldb?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
@@ -179,9 +231,6 @@ spring.datasource.password=tooldb123
 # JPA 配置
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=false
-
-# 服务端口
-server.port=5000
 
 # 文件上传配置
 spring.servlet.multipart.enabled=true
@@ -198,7 +247,25 @@ upload.result-dir=uploads/results
 upload.max-size=104857600
 ```
 
-### 3.4 构建项目
+### 3.4 构建前端
+
+```bash
+cd frontend
+
+# 安装依赖
+npm install
+
+# 开发模式（可选，用于本地开发调试）
+npm run dev
+# 访问 http://localhost:3000
+
+# 生产构建（构建产物直接输出到后端 static 目录）
+npm run build
+# 产物自动输出到 backend-java/src/main/resources/static/
+# Spring Boot 可直接加载，无需手动复制
+```
+
+### 3.5 构建后端
 
 ```bash
 cd backend-java
@@ -213,73 +280,49 @@ mvn clean package -DskipTests
 # backend-java/target/tool-platform-1.0.0.jar
 ```
 
+### 3.6 同步前端到后端
+
+前端构建产物已直接输出到后端的 `static` 目录（由 `vite.config.js` 的 `build.outDir` 配置），**无需手动复制**。
+
+如需手动构建：
+```bash
+cd frontend
+npm run build
+# 产物自动输出到 ../backend-java/src/main/resources/static/
+```
+
 ---
 
 ## 四、部署运行
 
-### 4.0 启动器使用（推荐）
+### 4.0 一键启动（推荐）
 
-项目已提供完整的启动器脚本，支持一键启动/停止/查看状态。
-
-#### Windows 环境
-
-双击运行 `console.bat` 打开控制台菜单：
-
-```
-============================================
-    一线工具平台 控制台
-============================================
-
-  [1] 启动服务
-  [2] 停止服务
-  [3] 重启服务
-  [4] 查看服务状态
-  [5] 查看日志
-  [6] 打开浏览器
-  [7] 构建项目
-  [0] 退出
-```
-
-也可以直接使用独立脚本：
-
-| 脚本 | 用途 |
-|------|------|
-| `start.bat` | 启动服务（自动构建+启动+打开浏览器） |
-| `stop.bat` | 停止服务 |
-| `console.bat` | 控制台菜单（包含所有操作） |
-
-#### Linux 环境
-
-```bash
-# 添加执行权限
-chmod +x start.sh stop.sh
-
-# 启动服务（首次会自动构建）
-./start.sh
-
-# 停止服务
-./stop.sh
-```
-
-#### 启动器特性
-
-- ✅ **自动构建**：首次运行自动检测并构建项目
-- ✅ **端口检测**：自动检测端口占用并提示处理
-- ✅ **日志输出**：启动成功后显示访问地址和账号
-- ✅ **浏览器跳转**：Windows 下自动打开浏览器
-- ✅ **优雅停止**：支持优雅停止和强制停止
-- ✅ **彩色输出**：Linux 下支持彩色日志提示
+**双击项目根目录的 `start.bat`** 即可：
+- 自动检测 JDK / Maven / Node.js 环境
+- 自动安装前端依赖并构建（首次运行）
+- 构建产物直接输出到后端 static 目录（无需手动复制）
+- 自动编译后端项目
+- 清理旧进程并启动后端服务
+- **智能等待**：循环检测端口 5000 是否在监听，就绪后自动打开浏览器
+- 自动打开浏览器访问 `http://localhost:5000`
 
 ### 4.1 开发模式运行
 
+#### 后端
+
 ```bash
 cd backend-java
-
-# 方式1：使用 Maven 运行
 mvn spring-boot:run
+# 访问 http://localhost:5000
+```
 
-# 方式2：使用 jar 文件运行
-java -jar target/tool-platform-1.0.0.jar
+#### 前端（独立开发）
+
+```bash
+cd frontend
+npm run dev
+# 访问 http://localhost:3000
+# Vite 会自动代理 /api 请求到后端
 ```
 
 ### 4.2 生产模式运行
@@ -291,20 +334,9 @@ cd backend-java
 java -Xms512m -Xmx2048m -jar target/tool-platform-1.0.0.jar
 ```
 
-#### 方式2：使用项目启动器（推荐）
+#### 方式2：一键启动（推荐）
 
-Windows:
-```batch
-# 双击运行
-start.bat
-```
-
-Linux:
-```bash
-# 添加权限并运行
-chmod +x start.sh
-./start.sh
-```
+双击项目根目录的 `start.bat`
 
 ### 4.3 配置开机自启（Linux systemd）
 
@@ -312,7 +344,7 @@ chmod +x start.sh
 
 ```ini
 [Unit]
-Description=一线工具平台
+Description=Tool Platform Service
 After=network.target mysql.service
 
 [Service]
@@ -368,16 +400,6 @@ curl -X POST http://localhost:5000/api/auth/login \
   -d '{"username":"admin","password":"123456"}'
 ```
 
-### 5.4 日志查看
-
-```bash
-# 查看实时日志
-tail -f backend-java/app.log
-
-# 查看最近错误
-grep -i error backend-java/app.log | tail -20
-```
-
 ---
 
 ## 六、常见问题排查
@@ -386,7 +408,7 @@ grep -i error backend-java/app.log | tail -20
 
 ```bash
 # Windows
-netstat -ano | findstr 5000
+netstat -ano | findstr :5000
 taskkill /PID <PID> /F
 
 # Linux
@@ -437,6 +459,31 @@ spring.servlet.multipart.max-request-size=100MB
 - 确认数据库字符集为 `utf8mb4`
 - 确认 MySQL 连接 URL 包含 `characterEncoding=utf8`
 
+### 6.6 前端页面刷新 404
+
+**解决方案：** 后端已配置 `FrontendForwardController`，将所有非 API 路由转发到 `index.html`。确认该配置类存在于 `com.toolplatform.config` 包中。
+
+### 6.7 npm 安装失败
+
+```bash
+# 清除缓存重试
+npm cache clean --force
+npm install
+
+# 或使用国内镜像
+npm install --registry=https://registry.npmmirror.com
+```
+
+### 6.8 Windows 启动器乱码
+
+如果双击 `start.bat` 后出现中文乱码或报错"不是内部或外部命令"：
+
+**原因**：批处理文件中的中文字符在 Windows CMD 中编码不兼容。
+
+**解决方案**：项目根目录的 `start.bat` 已修复为全英文版本，可直接使用。如果需要自定义批处理脚本，请确保：
+1. 文件编码为 `GBK`（使用记事本另存为时选择）
+2. 或在脚本开头添加 `chcp 65001 >nul` 切换到 UTF-8
+
 ---
 
 ## 七、备份与恢复
@@ -464,6 +511,8 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 
 ## 八、技术栈版本清单
 
+### 后端
+
 | 技术 | 版本 | 用途 |
 |------|------|------|
 | Java | 21 (LTS) | 后端开发语言 |
@@ -471,25 +520,35 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | Spring Data JPA | 3.2.5 | 数据访问层 |
 | Spring Security Crypto | 6.2.5 | 密码加密 |
 | MySQL | 8.0+ | 关系数据库 |
-| H2 | 2.2+ (可选) | 内存数据库（开发用） |
 | JJWT | 0.12.5 | JWT 令牌 |
 | Apache POI | 5.2.5 | Excel 文件处理 |
-| Maven | 3.8+ | 构建工具 |
-| HTML5 + Tailwind CSS | - | 前端页面 |
-| JavaScript (ES6+) | - | 前端逻辑 |
+| Maven | 3.8+ | 后端构建工具 |
+
+### 前端
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Vue | 3.4+ | 前端框架 |
+| Vue Router | 4.3+ | 路由管理 |
+| Pinia | 2.1+ | 状态管理 |
+| Vite | 5.2+ | 前端构建工具 |
+| Tailwind CSS | 3.x | CSS 框架 |
 | Chart.js | 4.4+ | 数据可视化 |
 | Font Awesome | 6.4+ | 图标库 |
+
+### 运行环境
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Node.js | 18+ | 前端构建环境 |
+| npm | 9+ | 前端包管理 |
 | Python | 3.8+ | 代码执行引擎 |
 
 ---
 
 ## 九、附录
 
-### A. 完整的 MySQL 建表语句
-
-参考：`database/V1__init_schema.sql`
-
-### B. 前端 API 接口文档
+### A. API 接口文档
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -499,51 +558,62 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | PUT | /api/auth/update_profile | 更新个人资料 |
 | GET | /api/tools | 获取工具列表 |
 | GET | /api/tools/{id} | 获取工具详情 |
-| POST | /api/tools/{id}/upload | 上传文件 |
-| POST | /api/tools/create | 创建工具 |
+| POST | /api/tools/{id}/upload | 上传文件并执行 |
+| POST | /api/tools | 创建工具 |
+| PUT | /api/tools/{id}/toggle_status | 切换工具上下线 |
+| DELETE | /api/tools/{id} | 删除工具 |
 | GET | /api/stats/dashboard | 获取仪表盘数据 |
+| GET | /api/stats/tool/{id} | 获取工具统计 |
 | GET | /api/messages | 获取消息列表 |
-| POST | /api/messages/create | 创建消息 |
 | GET | /api/reviews | 获取评价列表 |
 | POST | /api/reviews | 提交评价 |
+| GET | /api/files/preview/{file} | 预览结果文件 |
+| GET | /api/files/download/{file} | 下载结果文件 |
 
-### C. 默认文件目录结构
+### B. 前端路由表
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
+| `/login` | 登录/注册 | 无需认证 |
+| `/home` | 首页 | 仪表盘 |
+| `/tools` | 全部工具 | 工具列表 |
+| `/tools/:id` | 工具详情 | 使用工具、上传文件 |
+| `/category/:name` | 分类页 | 按分类筛选 |
+| `/profile` | 个人中心 | 修改信息 |
+| `/manage` | 工具管理 | 作者专属 |
+| `/messages` | 消息中心 | 系统消息 |
+| `/feedback` | 反馈评价 | 提交反馈 |
+
+### C. 默认文件目录
 
 ```
-tool-platform/
+项目根目录/
+├── start.bat                      # ⭐ 一键启动脚本（双击运行）
 ├── backend-java/
-│   ├── data/                           # 数据库文件目录
+│   ├── data/                           # H2 数据库文件（可选）
 │   ├── uploads/
-│   │   ├── templates/                  # 用户上传的模板文件
-│   │   └── results/                    # 处理结果文件
-│   ├── app.log                         # 运行日志（启动后生成）
-│   ├── app.pid                         # 进程 PID 文件（启动后生成）
-│   ├── src/main/resources/static/      # 前端静态文件
+│   │   ├── templates/                  # 模板文件
+│   │   └── results/                    # 处理结果
+│   ├── src/main/resources/static/      # 前端构建产物（vite 输出）
 │   │   ├── index.html
-│   │   ├── css/
-│   │   └── js/
-│   └── target/                         # 编译输出（构建后生成）
-│       └── tool-platform-1.0.0.jar
-├── start.bat                           # Windows 启动器
-├── stop.bat                            # Windows 停止器
-├── console.bat                         # Windows 控制台菜单
-├── start.sh                            # Linux 启动器
-└── stop.sh                             # Linux 停止器
+│   │   └── assets/                     # JS/CSS 打包文件
+│   └── target/
+│       └── tool-platform-1.0.0.jar     # 构建产物
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/request.js              # API 请求封装
+│   │   ├── components/                 # 公共组件
+│   │   ├── composables/                # 组合式函数
+│   │   ├── router/index.js             # 路由配置
+│   │   ├── store/modules/user.js       # 用户状态
+│   │   ├── views/                      # 页面组件
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── index.html
+│   ├── vite.config.js                  # outDir → backend static/
+│   └── package.json
+│
+└── docs/
+    └── DEPLOY.md                       # 本文档
 ```
-
-### D. 启动器脚本说明
-
-#### Windows 脚本
-
-| 脚本 | 功能 | 使用方式 |
-|------|------|---------|
-| `start.bat` | 启动服务 | 双击运行 |
-| `stop.bat` | 停止服务 | 双击运行 |
-| `console.bat` | 控制台菜单 | 双击运行，选择操作 |
-
-#### Linux 脚本
-
-| 脚本 | 功能 | 使用方式 |
-|------|------|---------|
-| `start.sh` | 启动服务 | `./start.sh` |
-| `stop.sh` | 停止服务 | `./stop.sh` |
