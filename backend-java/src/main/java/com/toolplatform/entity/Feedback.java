@@ -4,21 +4,20 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "messages")
-public class Message {
+@Table(name = "feedback")
+public class Feedback {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(nullable = false)
     private String type;
     @Column(nullable = false)
     private String title;
-    private String content = "";
-    private String fromUser = "";
-    private Long fromUserId;
-    private Long toUserId;
-    private Long toolId;
-    private String status = "未读";
-    private String replyContent = "";
+    @Column(columnDefinition = "TEXT")
+    private String content;
+    @Column(nullable = false)
+    private Long userId;
+    private String username;
+    private String status = "待处理";
     private LocalDateTime createdAt = LocalDateTime.now();
 
     public Long getId() { return id; }
@@ -29,18 +28,12 @@ public class Message {
     public void setTitle(String title) { this.title = title; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
-    public String getFromUser() { return fromUser; }
-    public void setFromUser(String fromUser) { this.fromUser = fromUser; }
-    public Long getFromUserId() { return fromUserId; }
-    public void setFromUserId(Long fromUserId) { this.fromUserId = fromUserId; }
-    public Long getToUserId() { return toUserId; }
-    public void setToUserId(Long toUserId) { this.toUserId = toUserId; }
-    public Long getToolId() { return toolId; }
-    public void setToolId(Long toolId) { this.toolId = toolId; }
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
-    public String getReplyContent() { return replyContent; }
-    public void setReplyContent(String replyContent) { this.replyContent = replyContent; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

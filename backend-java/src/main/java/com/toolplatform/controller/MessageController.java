@@ -70,9 +70,23 @@ public class MessageController extends BaseController {
         }
     }
 
-    @PostMapping("/{id}/read")
-    public ResponseEntity<?> readMessage(@PathVariable Long id) {
-        messageService.markAsRead(id);
+    @PutMapping("/{id}/read")
+    public ResponseEntity<?> readMessage(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return unauthorized();
+        try {
+            messageService.markAsRead(id, u);
+            return ResponseEntity.ok(Map.of("message", "ok"));
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
+        }
+    }
+
+    @PutMapping("/read_all")
+    public ResponseEntity<?> readAllMessages(HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return unauthorized();
+        messageService.markAllAsRead(u);
         return ResponseEntity.ok(Map.of("message", "ok"));
     }
 }

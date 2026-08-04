@@ -22,7 +22,7 @@
       </div>
 
       <!-- 登录表单 -->
-      <form v-if="activeTab === 'login'" @submit="handleLogin" class="space-y-4">
+      <form v-if="activeTab === 'login'" @submit.prevent="handleLogin" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
           <input v-model="loginForm.username" type="text" required class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="请输入用户名">
@@ -37,7 +37,7 @@
       </form>
 
       <!-- 注册表单 -->
-      <form v-else @submit="handleRegister" class="space-y-4">
+      <form v-else @submit.prevent="handleRegister" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
           <input v-model="regForm.username" type="text" required @input="checkUsername" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="3-20位字符">

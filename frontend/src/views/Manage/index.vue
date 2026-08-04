@@ -5,7 +5,7 @@
     <!-- 上传新工具 -->
     <div class="bg-white rounded-lg shadow-md p-6 mb-8">
       <h2 class="text-xl font-bold mb-4">上传新工具</h2>
-      <form @submit="handleUpload" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <form @submit.prevent="handleUpload" class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">工具名称</label>
           <input v-model="form.name" type="text" required class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
@@ -58,13 +58,13 @@
             <h3 class="font-bold">{{ tool.name }}</h3>
             <p class="text-sm text-gray-500">{{ tool.description }}</p>
             <div class="flex items-center gap-2 mt-2">
-              <span :class="['text-xs px-2 py-1 rounded', toolStatusColor(tool.status)]">{{ tool.status === 1 ? '在线' : '离线' }}</span>
+              <span :class="['text-xs px-2 py-1 rounded', toolStatusColor(tool.status)]">{{ tool.status === 'online' ? '在线' : '离线' }}</span>
               <span class="text-xs text-gray-400">下载: {{ tool.downloads }}</span>
             </div>
           </div>
           <div class="flex gap-2">
             <button @click="toggleStatus(tool)" class="px-3 py-1 text-sm rounded border hover:bg-gray-50 transition">
-              {{ tool.status === 1 ? '下线' : '上线' }}
+              {{ tool.status === 'online' ? '下线' : '上线' }}
             </button>
             <button @click="deleteTool(tool.id)" class="px-3 py-1 text-sm rounded border border-red-300 text-red-500 hover:bg-red-50 transition">
               删除
@@ -96,7 +96,7 @@ function onFileChange(e) {
 }
 
 function toolStatusColor(status) {
-  return status === 1 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+  return status === 'online' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
 }
 
 async function handleUpload() {
@@ -125,7 +125,8 @@ async function handleUpload() {
 
 async function loadMyTools() {
   try {
-    myTools.value = await request('/api/tools/my')
+    const data = await request('/api/tools/my')
+    myTools.value = data.tools || []
   } catch (e) {}
 }
 

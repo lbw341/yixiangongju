@@ -5,7 +5,7 @@
       <!-- 提交反馈 -->
       <div class="bg-white rounded-lg shadow-md p-6">
         <h2 class="text-xl font-bold mb-4">提交反馈</h2>
-        <form @submit="handleSubmit" class="space-y-4">
+        <form @submit.prevent="handleSubmit" class="space-y-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">反馈类型</label>
             <select v-model="form.type" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
@@ -36,7 +36,7 @@
           <div v-for="fb in myFeedback" :key="fb.id" class="border rounded-lg p-4">
             <div class="flex justify-between items-start">
               <h3 class="font-semibold">{{ fb.title }}</h3>
-              <span class="text-xs text-gray-400">{{ fb.created_at }}</span>
+              <span class="text-xs text-gray-400">{{ formatTime(fb.createdAt) }}</span>
             </div>
             <p class="text-sm text-gray-600 mt-1">{{ fb.content }}</p>
             <div class="flex items-center gap-2 mt-2">
@@ -81,6 +81,11 @@ async function loadMyFeedback() {
     const data = await request('/api/feedback/my')
     myFeedback.value = data.feedback || data.messages || []
   } catch (e) {}
+}
+
+function formatTime(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleString('zh-CN')
 }
 
 onMounted(loadMyFeedback)

@@ -7,4 +7,6 @@ import java.util.List;
 public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findByToUserIdOrFromUserIdOrderByCreatedAtDesc(Long toUserId, Long fromUserId);
     List<Message> findAllByOrderByCreatedAtDesc();
+    List<Message> findByToUserIdAndStatus(Long toUserId, String status);
+    List<Message> findByFromUserIdAndStatus(Long fromUserId, String status);
 }

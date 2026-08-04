@@ -59,7 +59,7 @@ public class ToolController extends BaseController {
         List<Tool> tools;
         if (search != null && !search.trim().isEmpty()) {
             tools = toolRepo.searchTools(search.trim());
-        } else if (category != null && !category.isEmpty()) {
+        } else if (category != null && !category.isEmpty() && !"全部".equals(category)) {
             tools = toolRepo.findByCategoryAndStatus(category, "online");
         } else {
             tools = toolRepo.findByStatus("online");
@@ -231,6 +231,83 @@ public class ToolController extends BaseController {
         List<Tool> tools = toolRepo.findByAuthorId(u.getId());
         tools.sort((a, b) -> Long.compare(b.getId(), a.getId()));
         return ResponseEntity.ok(Map.of("tools", tools));
+    }
+
+    @PostMapping("")
+    public ResponseEntity<?> uploadTool(HttpServletRequest request,
+                                        @RequestParam Map<String, String> form,
+                                        @RequestParam(value = "file", required = false) MultipartFile file) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        String name = form.getOrDefault("name", "").trim();
+        String type = form.getOrDefault("type", "").trim();
+        String category = form.getOrDefault("category", "").trim();
+        if (name.isEmpty() || type.isEmpty() || category.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "工具名称、类型和分类不能为空"));
+        }
+
+        Tool tool = new Tool();
+        tool.setName(name);
+        tool.setType(type);
+        tool.setCategory(category);
+        tool.setKeywords(form.getOrDefault("keywords", ""));
+        tool.setDescription(form.getOrDefault("description", ""));
+        tool.setDepartment(form.getOrDefault("department", ""));
+        tool.setAuthorId(u.getId());
+        tool.setAuthorName(u.getNickname() != null && !u.getNickname().isEmpty() ? u.getNickname() : u.getUsername());
+        tool.setContactEmail(form.getOrDefault("contact_email", ""));
+        tool.setContactPhone(form.getOrDefault("contact_phone", ""));
+        tool.setInstructions(form.getOrDefault("instructions", ""));
+        tool.setStatus("online");
+
+        if (file != null && !file.isEmpty()) {
+            try {
+                String uniqueName = toolService.saveTemplateFile(file);
+                tool.setTemplateFile(uniqueName);
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
+            }
+        }
+
+        toolRepo.save(tool);
+        return ResponseEntity.status(201).body(Map.of("message", "工具创建成功", "tool_id", tool.getId()));
+    }
+
+    @PutMapping("/{id}/toggle_status")
+    public ResponseEntity<?> toggleStatus(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        var opt = toolRepo.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
+
+        Tool tool = opt.get();
+        if (!"admin".equals(u.getRole()) && !tool.getAuthorId().equals(u.getId())) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权操作此工具"));
+        }
+
+        String newStatus = "online".equals(tool.getStatus()) ? "offline" : "online";
+        tool.setStatus(newStatus);
+        toolRepo.save(tool);
+        return ResponseEntity.ok(Map.of("message", "状态已更新为" + ("online".equals(newStatus) ? "在线" : "离线"), "status", newStatus));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteTool(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        var opt = toolRepo.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
+
+        Tool tool = opt.get();
+        if (!"admin".equals(u.getRole()) && !tool.getAuthorId().equals(u.getId())) {
+            return ResponseEntity.status(403).body(Map.of("error", "无权删除此工具"));
+        }
+
+        toolRepo.delete(tool);
+        return ResponseEntity.ok(Map.of("message", "删除成功"));
     }
 
     @PostMapping("/{id}/upload")

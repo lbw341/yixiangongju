@@ -1,5 +1,6 @@
 <template>
-  <div class="page" v-if="!loading && tool">
+  <div class="page">
+    <div v-if="!loading && tool">
     <button @click="goBack" class="mb-4 inline-flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition">
       <i class="fas fa-arrow-left"></i> 返回
     </button>
@@ -12,7 +13,7 @@
           <span :class="['px-2 py-1 text-xs rounded font-semibold', typeColor]">{{ tool.type }}</span>
           <span v-for="kw in keywords" :key="kw" class="bg-gray-200 text-sm px-2 py-1 rounded">{{ kw }}</span>
         </div>
-        <p class="mt-4 text-gray-500">由 <strong>{{ tool.author_name }}</strong> ({{ tool.department || '' }}) 提供</p>
+        <p class="mt-4 text-gray-500">由 <strong>{{ tool.authorName }}</strong> ({{ tool.department || '' }}) 提供</p>
       </div>
       <div class="flex-shrink-0 mt-4 md:mt-0">
         <div class="text-right">
@@ -130,8 +131,8 @@
         <div class="bg-white rounded-lg shadow-md p-6">
           <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fas fa-envelope"></i>联系方式</h3>
           <div class="space-y-2 text-sm">
-            <p><strong>邮箱:</strong> <a :href="'mailto:' + (tool.contact_email || 'author@example.com')" class="text-indigo-500">{{ tool.contact_email || 'author@example.com' }}</a></p>
-            <p><strong>手机号:</strong> {{ tool.contact_phone || '未提供' }}</p>
+            <p><strong>邮箱:</strong> <a :href="'mailto:' + (tool.contactEmail || 'author@example.com')" class="text-indigo-500">{{ tool.contactEmail || 'author@example.com' }}</a></p>
+            <p><strong>手机号:</strong> {{ tool.contactPhone || '未提供' }}</p>
           </div>
         </div>
 
@@ -142,7 +143,7 @@
             <div v-for="r in reviews" :key="r.id" class="border-b border-gray-100 pb-2">
               <p class="font-semibold">{{ r.username }}</p>
               <p class="text-sm text-gray-600">"{{ r.content }}"</p>
-              <p class="text-xs text-gray-400 mt-1">{{ r.created_at || '' }}</p>
+              <p class="text-xs text-gray-400 mt-1">{{ formatTime(r.createdAt) }}</p>
             </div>
             <p v-if="reviews.length === 0" class="text-gray-400 text-sm">暂无评价</p>
           </div>
@@ -152,7 +153,9 @@
       </div>
     </div>
   </div>
-  <div v-else-if="error" class="page"><p class="text-red-500">加载失败: {{ error }}</p></div>
+  <div v-else-if="error" class="text-red-500">加载失败: {{ error }}</div>
+    <div v-else class="text-gray-500">加载中...</div>
+  </div>
 </template>
 
 <script setup>
@@ -335,6 +338,11 @@ async function submitReview() {
     reviewContent.value = ''
     loadTool()
   } catch (e) { showToast(e.message, 'error') }
+}
+
+function formatTime(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleString('zh-CN')
 }
 
 onMounted(loadTool)

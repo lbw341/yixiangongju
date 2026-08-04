@@ -74,10 +74,40 @@ public class MessageService {
     /**
      * 标记消息为已读
      */
-    public void markAsRead(Long id) {
+    public void markAsRead(Long id, User user) {
         msgRepo.findById(id).ifPresent(msg -> {
+            if (!canAccessMessage(msg, user)) {
+                throw new IllegalArgumentException("无权操作此消息");
+            }
             msg.setStatus("已读");
             msgRepo.save(msg);
         });
+    }
+
+    /**
+     * 标记用户所有消息为已读
+     */
+    public void markAllAsRead(User user) {
+        List<Message> unread;
+        if ("admin".equals(user.getRole())) {
+            unread = msgRepo.findAll().stream()
+                .filter(m -> "未读".equals(m.getStatus()))
+                .toList();
+        } else {
+            unread = msgRepo.findByToUserIdAndStatus(user.getId(), "未读");
+        }
+        for (Message msg : unread) {
+            msg.setStatus("已读");
+            msgRepo.save(msg);
+        }
+    }
+
+    /**
+     * 判断用户是否有权操作该消息
+     */
+    private boolean canAccessMessage(Message msg, User user) {
+        if ("admin".equals(user.getRole())) return true;
+        if (user.getId().equals(msg.getToUserId())) return true;
+        return user.getId().equals(msg.getFromUserId());
     }
 }

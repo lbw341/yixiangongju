@@ -1,13 +1,15 @@
 <template>
-  <div class="page" v-if="!loading">
-    <h1 class="text-3xl font-bold mb-6">{{ category }}类工具</h1>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      <ToolCard v-for="tool in tools" :key="tool.id" :tool="tool" />
-      <p v-if="tools.length === 0" class="col-span-full text-center text-gray-500">该分类下暂无工具。</p>
+  <div class="page">
+    <div v-if="!loading">
+      <h1 class="text-3xl font-bold mb-6">{{ category }}类工具</h1>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <ToolCard v-for="tool in tools" :key="tool.id" :tool="tool" />
+        <p v-if="tools.length === 0" class="col-span-full text-center text-gray-500">该分类下暂无工具。</p>
+      </div>
     </div>
+    <div v-else-if="error" class="text-red-500">加载失败: {{ error }}</div>
+    <div v-else class="text-gray-500">加载中...</div>
   </div>
-  <div v-else class="page"><p class="text-gray-500">加载中...</p></div>
-  <div v-if="error" class="page"><p class="text-red-500">加载失败: {{ error }}</p></div>
 </template>
 
 <script setup>
@@ -25,7 +27,8 @@ const error = ref('')
 async function loadData() {
   try {
     loading.value = true
-    tools.value = await request(`/api/tools?category=${encodeURIComponent(category.value)}`)
+    const data = await request(`/api/tools?category=${encodeURIComponent(category.value)}`)
+    tools.value = data.tools || []
   } catch (e) {
     error.value = e.message
   } finally {
