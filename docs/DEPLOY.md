@@ -172,42 +172,49 @@ tool-platform/
 │   │   └── main/
 │   │       ├── java/         # Java 源码
 │   │       │   └── com/toolplatform/
-│   │       │       ├── controller/   # 控制器层
+│   │       │       ├── controller/   # 控制器层（认证/工具/消息/反馈/评价/文件/统计）
 │   │       │       ├── service/      # 业务层
-│   │       │       ├── repository/   # 数据访问层
-│   │       │       ├── entity/       # 实体类
-│   │       │       └── config/       # 配置类
+│   │       │       │   ├── ToolService.java      # 工具业务（Python 执行/文件处理）
+│   │       │       │   └── MessageService.java   # 消息业务（创建/回复/已读）
+│   │       │       ├── repository/   # 数据访问层（JPA Repositories）
+│   │       │       ├── entity/       # 实体类（User/Tool/Message/Feedback/Review 等）
+│   │       │       ├── config/       # 配置类（CORS/前端转发/JWT）
+│   │       │       ├── dto/          # 数据传输对象
+│   │       │       └── util/         # 工具类（JwtUtil）
 │   │       └── resources/
-│   │           ├── application.properties
-│   │           └── static/  # 前端构建产物（自动生成）
-│   ├── data/                  # 数据库文件目录
+│   │           ├── application.properties  # 应用配置
+│   │           └── static/           # 前端构建产物（自动生成，Vite 输出）
 │   ├── uploads/               # 用户上传文件存储
+│   │   ├── templates/         # 模板文件
+│   │   └── results/           # 处理结果
 │   └── pom.xml                # Maven 配置
-├── frontend/                  # 前端 Vue 3 项目
+├── frontend/                  # 前端 Vue 3 + Vite 项目
 │   ├── src/
-│   │   ├── api/               # API 接口封装
-│   │   ├── components/        # 公共组件
-│   │   ├── composables/       # 组合式函数
-│   │   ├── router/            # Vue Router 路由配置
+│   │   ├── api/               # API 接口封装（request.js：统一请求/错误处理）
+│   │   ├── components/        # 公共组件（ToolCard 工具卡片、Toast 提示等）
+│   │   ├── composables/       # 组合式函数（useToast 消息提示）
+│   │   ├── router/            # Vue Router 路由配置（含路由守卫）
 │   │   ├── store/             # Pinia 状态管理
-│   │   ├── styles/            # 全局样式
-│   │   ├── views/             # 页面组件
-│   │   │   ├── Home/          # 首页
-│   │   │   ├── Login/         # 登录注册
-│   │   │   ├── Detail/        # 工具详情
-│   │   │   ├── Category/      # 分类页
-│   │   │   ├── Profile/       # 个人中心
-│   │   │   ├── Manage/        # 工具管理
-│   │   │   ├── Messages/      # 消息中心
-│   │   │   ├── ToolList/      # 全部工具
-│   │   │   ├── Feedback/      # 反馈评价
-│   │   │   └── Layout/        # 布局组件
+│   │   │   └── modules/
+│   │   │       └── user.js    # 用户状态（token、role、nickname、未读消息数）
+│   │   │   ├── views/             # 页面组件
+│   │   │   │   ├── Home/          # 首页（仪表盘）
+│   │   │   │   ├── Login/         # 登录/注册
+│   │   │   │   ├── Detail/        # 工具详情（使用/执行 Python）
+│   │   │   │   ├── Category/      # 分类页
+│   │   │   │   ├── Profile/       # 个人中心
+│   │   │   │   ├── Manage/        # 工具管理（作者）
+│   │   │   │   ├── Messages/      # 消息中心（查看/回复/标记已读）
+│   │   │   │   ├── ToolList/      # 全部工具
+│   │   │   │   ├── ToolUpload/    # 上传工具（作者）
+│   │   │   │   ├── Feedback/      # 反馈与评价
+│   │   │   │   └── Layout/        # 布局组件（侧边栏/顶栏/未读铃铛）
 │   │   ├── App.vue            # 根组件
 │   │   └── main.js            # 入口文件
 │   ├── index.html
-│   ├── vite.config.js
+│   ├── vite.config.js         # 配置：build.outDir → backend static/
 │   └── package.json
-├── database/                  # 数据库脚本
+├── database/                  # 数据库脚本（可选）
 ├── docs/                      # 文档
 │   └── DEPLOY.md              # 本部署文档
 ├── start.bat                  # ⭐ 一键启动（双击即可）
@@ -384,9 +391,17 @@ http://localhost:5000
 
 系统初始化后会有一个默认管理员账号：
 
-| 账号 | 密码 | 角色 |
-|------|------|------|
-| admin | 123456 | 管理员 |
+| 账号 | 密码 | 角色 | 权限说明 |
+|------|------|------|---------|
+| admin | 123456 | 管理员 | 管理所有工具、查看/回复消息、查看所有反馈 |
+
+用户注册时可选择三种角色：
+
+| 角色 | 权限说明 |
+|------|---------|
+| admin（管理员） | 全部权限 + 查看所有反馈 + 回复消息 |
+| author（作者） | 上传/管理自己的工具 + 提交反馈 |
+| user（普通用户） | 使用工具 + 提交反馈 + 发表评价 |
 
 ### 5.3 API 健康检查
 
@@ -453,11 +468,16 @@ spring.servlet.multipart.max-file-size=100MB
 spring.servlet.multipart.max-request-size=100MB
 ```
 
-### 6.5 中文乱码
+### 6.5 Python 中文乱码
 
 **解决方案：**
-- 确认数据库字符集为 `utf8mb4`
-- 确认 MySQL 连接 URL 包含 `characterEncoding=utf8`
+1. 确认数据库字符集为 `utf8mb4`
+2. 确认 MySQL 连接 URL 包含 `characterEncoding=utf8`
+3. Python 代码执行乱码：后端在 `ToolService.executePythonCode` 中通过 `ProcessBuilder` 设置了两个环境变量：
+   - `PYTHONIOENCODING=utf-8` — 强制 Python 的 stdin/stdout/stderr 使用 UTF-8 编码
+   - `PYTHONUTF8=1` — 启用 Python UTF-8 模式（Python 3.7+），让所有文件 I/O 默认使用 UTF-8
+   - Java 端使用 `StandardCharsets.UTF_8` 读取 Python 进程输出，确保编码一致
+4. 如仍有乱码，请确认 Python 版本 ≥ 3.7，并检查上传的 Python 文件是否包含 BOM 头
 
 ### 6.6 前端页面刷新 404
 
@@ -483,6 +503,34 @@ npm install --registry=https://registry.npmmirror.com
 **解决方案**：项目根目录的 `start.bat` 已修复为全英文版本，可直接使用。如果需要自定义批处理脚本，请确保：
 1. 文件编码为 `GBK`（使用记事本另存为时选择）
 2. 或在脚本开头添加 `chcp 65001 >nul` 切换到 UTF-8
+
+### 6.9 前端修改后页面不更新（缓存问题）
+
+修改前端代码并 `npm run build` 后，Spring Boot 可能仍返回旧版页面。
+
+**解决方案**：
+1. 将新构建产物从 `frontend/dist/` 复制到 `backend-java/target/classes/static/`
+2. 或者重启 Spring Boot 服务（推荐），让其重新加载静态资源
+
+### 6.10 客户端路由跳转变空白
+
+点击侧边栏或工具卡片后页面变空白（只有导航栏没有内容）。
+
+**原因**：`Layout` 组件的 `<transition mode="out-in">` 与多根元素组件冲突导致。
+
+**解决方案**：
+1. 将 `Layout/index.vue` 中的 `<transition mode="out-in">` 改为 `<transition name="fade">`（移除 `mode` 属性）
+2. 将各页面组件（Category、Detail、Home、Profile 等）用单个根 `<div>` 包裹，确保只有一个根元素
+3. 重新 `npm run build` 并同步到 `target/classes/static/`
+
+### 6.11 反馈提交后消息中心看不到新消息
+
+**正常行为**：提交反馈后，系统会自动为所有管理员在消息表中创建一条通知消息（标题格式：`[反馈类型] 标题`）。
+
+**排查**：
+1. 确认数据库 `messages` 表中有新增记录
+2. 确认 `FeedbackController.submitFeedback` 方法中包含遍历管理员并创建消息的逻辑
+3. 清除浏览器缓存后重新登录
 
 ---
 
@@ -519,9 +567,11 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | Spring Boot | 3.2.5 | 应用框架 |
 | Spring Data JPA | 3.2.5 | 数据访问层 |
 | Spring Security Crypto | 6.2.5 | 密码加密 |
-| MySQL | 8.0+ | 关系数据库 |
-| JJWT | 0.12.5 | JWT 令牌 |
-| Apache POI | 5.2.5 | Excel 文件处理 |
+| MySQL | 8.0+ | 关系数据库（支持 utf8mb4 编码） |
+| JJWT | 0.12.5 | JWT 令牌生成与验证 |
+| Apache POI | 5.2.5 | Excel 文件（.xlsx/.xls）读取处理 |
+| ZipInputStream | JDK 内置 | ZIP 压缩包读取（支持批量文件处理） |
+| ProcessBuilder | JDK 内置 | Python 代码执行（设置 PYTHONIOENCODING=UTF-8） |
 | Maven | 3.8+ | 后端构建工具 |
 
 ### 前端
@@ -552,22 +602,29 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | /api/auth/login | 用户登录 |
-| POST | /api/auth/register | 用户注册 |
-| GET | /api/auth/me | 获取当前用户信息 |
-| PUT | /api/auth/update_profile | 更新个人资料 |
-| GET | /api/tools | 获取工具列表 |
+| POST | /api/auth/login | 用户登录（返回 JWT token） |
+| POST | /api/auth/register | 用户注册（支持 admin/author/user 三种角色） |
+| GET | /api/auth/me | 获取当前登录用户信息 |
+| PUT | /api/auth/update_profile | 更新个人资料（昵称、头像） |
+| GET | /api/tools | 获取在线工具列表（支持按分类/名称筛选） |
 | GET | /api/tools/{id} | 获取工具详情 |
-| POST | /api/tools/{id}/upload | 上传文件并执行 |
-| POST | /api/tools | 创建工具 |
-| PUT | /api/tools/{id}/toggle_status | 切换工具上下线 |
-| DELETE | /api/tools/{id} | 删除工具 |
-| GET | /api/stats/dashboard | 获取仪表盘数据 |
-| GET | /api/stats/tool/{id} | 获取工具统计 |
-| GET | /api/messages | 获取消息列表 |
-| GET | /api/reviews | 获取评价列表 |
+| POST | /api/tools/{id}/upload | 上传 Python 文件并执行，返回执行结果 |
+| POST | /api/tools | 创建工具（仅作者角色） |
+| PUT | /api/tools/{id}/toggle_status | 切换工具上下线（作者本人） |
+| DELETE | /api/tools/{id} | 删除工具（作者本人） |
+| GET | /api/stats/dashboard | 获取仪表盘统计数据 |
+| GET | /api/stats/tool/{id} | 获取单个工具的使用统计 |
+| GET | /api/messages | 获取当前用户的消息列表（管理员看全部，普通用户看自己的） |
+| POST | /api/messages/create | 创建消息（系统通知/管理员回复等） |
+| PUT | /api/messages/{id}/read | 标记指定消息为已读 |
+| PUT | /api/messages/read_all | 一键标记全部消息为已读 |
+| POST | /api/messages/{id}/reply | 管理员回复消息（回复后状态变为"已答复"） |
+| POST | /api/feedback | 提交反馈（自动为所有管理员创建消息通知） |
+| GET | /api/feedback/my | 获取当前用户提交的反馈列表 |
+| GET | /api/feedback | 获取所有反馈（仅管理员） |
+| GET | /api/reviews | 获取指定工具或全部工具的评价列表 |
 | POST | /api/reviews | 提交评价 |
-| GET | /api/files/preview/{file} | 预览结果文件 |
+| GET | /api/files/preview/{file} | 预览结果文件内容（支持文本/图片） |
 | GET | /api/files/download/{file} | 下载结果文件 |
 
 ### B. 前端路由表
@@ -575,14 +632,15 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | 路径 | 页面 | 说明 |
 |------|------|------|
 | `/login` | 登录/注册 | 无需认证 |
-| `/home` | 首页 | 仪表盘 |
-| `/tools` | 全部工具 | 工具列表 |
-| `/tools/:id` | 工具详情 | 使用工具、上传文件 |
-| `/category/:name` | 分类页 | 按分类筛选 |
-| `/profile` | 个人中心 | 修改信息 |
-| `/manage` | 工具管理 | 作者专属 |
-| `/messages` | 消息中心 | 系统消息 |
-| `/feedback` | 反馈评价 | 提交反馈 |
+| `/home` | 首页 | 仪表盘（最新工具/统计） |
+| `/tools` | 全部工具 | 工具列表（支持搜索/分类筛选） |
+| `/tools/:id` | 工具详情 | 使用工具、上传 Python 代码执行、查看执行结果 |
+| `/tools/upload` | 上传工具 | 作者专属：上传 Python 工具到平台 |
+| `/category/:name` | 分类页 | 按分类筛选工具 |
+| `/profile` | 个人中心 | 修改个人信息/密码 |
+| `/manage` | 工具管理 | 作者专属：增删改查自己的工具 |
+| `/messages` | 消息中心 | 查看/回复消息、标记已读、管理员回复反馈 |
+| `/feedback` | 反馈与评价 | 提交反馈、查看历史反馈、发表评价 |
 
 ### C. 默认文件目录
 
@@ -590,24 +648,25 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 项目根目录/
 ├── start.bat                      # ⭐ 一键启动脚本（双击运行）
 ├── backend-java/
-│   ├── data/                           # H2 数据库文件（可选）
 │   ├── uploads/
-│   │   ├── templates/                  # 模板文件
-│   │   └── results/                    # 处理结果
-│   ├── src/main/resources/static/      # 前端构建产物（vite 输出）
+│   │   ├── templates/                  # 用户上传的模板/Python 文件
+│   │   └── results/                    # Python 执行结果文件
+│   ├── src/main/resources/static/      # 前端构建源（Vite 输出目录）
 │   │   ├── index.html
 │   │   └── assets/                     # JS/CSS 打包文件
-│   └── target/
-│       └── tool-platform-1.0.0.jar     # 构建产物
+│   ├── target/classes/static/         # ⭐ Spring Boot 运行时实际加载的静态资源
+│   │   ├── index.html                  # 修改前端后需同步到此目录
+│   │   └── assets/
+│   └── pom.xml
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── api/request.js              # API 请求封装
-│   │   ├── components/                 # 公共组件
-│   │   ├── composables/                # 组合式函数
-│   │   ├── router/index.js             # 路由配置
-│   │   ├── store/modules/user.js       # 用户状态
-│   │   ├── views/                      # 页面组件
+│   │   ├── api/request.js              # API 请求封装（baseURL / 拦截器）
+│   │   ├── components/                # 公共组件
+│   │   ├── composables/               # 组合式函数
+│   │   ├── router/index.js            # 路由配置
+│   │   ├── store/modules/user.js      # 用户状态（Pinia）
+│   │   ├── views/                     # 页面组件
 │   │   ├── App.vue
 │   │   └── main.js
 │   ├── index.html
@@ -617,3 +676,5 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 └── docs/
     └── DEPLOY.md                       # 本文档
 ```
+
+> **重要提示**：修改前端代码后执行 `npm run build`，构建产物会输出到 `backend-java/src/main/resources/static/`。如需热更新调试，请将 `target/classes/static/` 也同步更新（复制 `src/main/resources/static/` 下的全部文件到 `target/classes/static/`），或直接重启 Spring Boot 服务。

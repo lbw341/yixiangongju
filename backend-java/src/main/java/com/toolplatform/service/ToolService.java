@@ -200,6 +200,10 @@ public class ToolService {
         pb.redirectErrorStream(true);
         pb.directory(workDir.toFile());
 
+        Map<String, String> env = pb.environment();
+        env.put("PYTHONIOENCODING", "utf-8");
+        env.put("PYTHONUTF8", "1");
+
         Process process = pb.start();
 
         if (!dataFilePaths.isEmpty()) {

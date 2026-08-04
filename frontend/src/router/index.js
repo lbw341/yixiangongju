@@ -54,6 +54,12 @@ const routes = [
         meta: { title: '全部工具' }
       },
       {
+        path: 'tools/upload',
+        name: 'ToolUpload',
+        component: () => import('../views/ToolUpload/index.vue'),
+        meta: { title: '上传工具', requiresAuthor: true }
+      },
+      {
         path: 'feedback',
         name: 'Feedback',
         component: () => import('../views/Feedback/index.vue'),

@@ -9,17 +9,49 @@
         <span class="logo-text font-bold text-lg whitespace-nowrap">一线工具平台</span>
       </div>
       <nav class="p-3 space-y-1">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          :class="['nav-link text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg transition-colors', { 'active bg-indigo-600 text-white': isActive(item.path) }]"
-          v-show="!item.requiresAuthor || userStore.isAuthor"
-        >
-          <i :class="item.icon"></i>
-          <span class="nav-text">{{ item.title }}</span>
-          <span v-if="item.badge" class="nav-item-extra ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ item.badge }}</span>
-        </router-link>
+        <template v-for="item in menuItems" :key="item.path || item.key">
+          <router-link
+            v-if="!item.children"
+            :to="item.path"
+            :class="['nav-link text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg transition-colors', { 'active bg-indigo-600 text-white': isActive(item.path) }]"
+            v-show="!item.requiresAuthor || userStore.isAuthor"
+          >
+            <i :class="item.icon"></i>
+            <span class="nav-text">{{ item.title }}</span>
+            <span v-if="item.badge" class="nav-item-extra ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ item.badge }}</span>
+          </router-link>
+
+          <div v-else v-show="!item.requiresAuthor || userStore.isAuthor">
+            <div :class="['flex items-center rounded-lg transition-colors', { 'bg-indigo-600 text-white': isActive(item.path) }]">
+              <router-link
+                :to="item.path"
+                class="nav-link flex-grow text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg transition-colors"
+                :class="{ 'active bg-indigo-600 text-white': isActive(item.path) }"
+              >
+                <i :class="item.icon"></i>
+                <span class="nav-text">{{ item.title }}</span>
+              </router-link>
+              <button
+                @click.stop="toggleExpand(item.key)"
+                :class="['px-3 py-2 text-gray-400 hover:text-white transition-colors', { 'text-white': isActive(item.path) }]"
+                :title="isExpanded(item.key) ? '收起' : '展开'"
+              >
+                <i :class="['fas text-xs', isExpanded(item.key) ? 'fa-chevron-down' : 'fa-chevron-right']"></i>
+              </button>
+            </div>
+            <div v-show="isExpanded(item.key)" class="ml-5 mt-1 space-y-1 border-l border-gray-700 pl-3">
+              <router-link
+                v-for="child in item.children"
+                :key="child.path"
+                :to="child.path"
+                :class="['nav-link text-sm text-gray-400 hover:bg-gray-700 hover:text-white rounded-lg transition-colors', { 'active bg-indigo-600 text-white': isActive(child.path) }]"
+              >
+                <i :class="child.icon"></i>
+                <span class="nav-text">{{ child.title }}</span>
+              </router-link>
+            </div>
+          </div>
+        </template>
       </nav>
     </aside>
 
@@ -28,8 +60,8 @@
       <!-- 顶部导航 -->
       <header class="header">
         <div class="flex items-center gap-4">
-          <button @click="toggleSidebar" class="p-2 hover:bg-gray-100 rounded-lg transition">
-            <i class="fas fa-bars"></i>
+          <button @click="goBack" class="p-2 hover:bg-gray-100 rounded-lg transition" title="返回上一界面">
+            <i class="fas fa-arrow-left"></i>
           </button>
           <h1 class="text-xl font-semibold">{{ currentTitle }}</h1>
         </div>
@@ -51,7 +83,7 @@
       <!-- 页面内容 -->
       <main class="p-6">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition name="fade">
             <component :is="Component" />
           </transition>
         </router-view>
@@ -64,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../store/modules/user'
 import ToastContainer from '../../components/Toast/index.vue'
@@ -75,15 +107,30 @@ const userStore = useUserStore()
 
 const isCollapsed = ref(false)
 const unreadCount = ref(0)
+const expandedMenus = reactive({})
+
+function isExpanded(key) { return !!expandedMenus[key] }
+function toggleExpand(key) { expandedMenus[key] = !expandedMenus[key] }
+
+watch(() => route.path, (p) => {
+  if (p.startsWith('/tools') || p.startsWith('/category')) expandedMenus.tools = true
+}, { immediate: true })
 
 const menuItems = computed(() => [
   { path: '/home', title: '首页', icon: 'fas fa-home' },
-  { path: '/tools', title: '全部工具', icon: 'fas fa-tools' },
-  { path: '/category/规划', title: '规划类', icon: 'fas fa-project-diagram' },
-  { path: '/category/建设', title: '建设类', icon: 'fas fa-hammer' },
-  { path: '/category/优化', title: '优化类', icon: 'fas fa-chart-line' },
-  { path: '/category/维护', title: '维护类', icon: 'fas fa-wrench' },
-  { path: '/category/客服', title: '客服类', icon: 'fas fa-cogs' },
+  {
+    key: 'tools',
+    path: '/tools',
+    title: '全部工具',
+    icon: 'fas fa-tools',
+    children: [
+      { path: '/category/规划', title: '规划类', icon: 'fas fa-project-diagram' },
+      { path: '/category/建设', title: '建设类', icon: 'fas fa-hammer' },
+      { path: '/category/优化', title: '优化类', icon: 'fas fa-chart-line' },
+      { path: '/category/维护', title: '维护类', icon: 'fas fa-wrench' },
+      { path: '/category/客服', title: '客服类', icon: 'fas fa-cogs' }
+    ]
+  },
   { path: '/manage', title: '工具管理', icon: 'fas fa-upload', requiresAuthor: true },
   { path: '/messages', title: '消息中心', icon: 'fas fa-envelope', badge: unreadCount.value > 0 ? unreadCount.value : null },
   { path: '/feedback', title: '反馈与评价', icon: 'fas fa-comment' },
@@ -98,8 +145,9 @@ function isActive(path) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
-function toggleSidebar() {
-  isCollapsed.value = !isCollapsed.value
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/home')
 }
 
 function handleLogout() {

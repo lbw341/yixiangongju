@@ -1,5 +1,6 @@
 <template>
-  <div class="page pt-6" v-if="!loading">
+  <div class="page pt-6">
+    <div v-if="!loading">
     <h1 class="text-3xl font-bold mb-2">欢迎回来！{{ greetingName }}</h1>
     <p class="text-gray-500 mb-8">开始新的一天，让高效工具助您一臂之力。</p>
 
@@ -75,7 +76,9 @@
       </div>
     </div>
   </div>
-  <div v-else class="page"><p class="text-red-500">加载失败: {{ error }}</p></div>
+  <div v-else-if="error" class="text-red-500">加载失败: {{ error }}</div>
+    <div v-else class="text-gray-500">加载中...</div>
+  </div>
 </template>
 
 <script setup>

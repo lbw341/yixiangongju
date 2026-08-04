@@ -1,5 +1,6 @@
 <template>
-  <div class="page" v-if="user">
+  <div class="page">
+    <div v-if="user">
     <h1 class="text-3xl font-bold mb-6">个人中心</h1>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <!-- 用户信息卡片 -->
@@ -18,7 +19,7 @@
       <div class="lg:col-span-2">
         <div class="bg-white rounded-lg shadow-md p-6">
           <h2 class="text-xl font-bold mb-4">修改信息</h2>
-          <form @submit="handleUpdate" class="space-y-4">
+          <form @submit.prevent="handleUpdate" class="space-y-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">昵称</label>
               <input v-model="editForm.nickname" type="text" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
@@ -38,6 +39,8 @@
         </div>
       </div>
     </div>
+    </div>
+    <div v-else class="text-gray-500">加载中...</div>
   </div>
 </template>
 

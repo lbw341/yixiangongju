@@ -8,6 +8,7 @@ import com.toolplatform.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -29,6 +30,17 @@ public class ReviewController extends BaseController {
 
     @Override
     protected JwtUtil getJwtUtil() { return jwtUtil; }
+
+    @GetMapping("")
+    public ResponseEntity<?> listReviews(@RequestParam(required = false) Long toolId) {
+        List<Review> reviews;
+        if (toolId != null) {
+            reviews = reviewRepo.findByToolIdOrderByCreatedAtDesc(toolId);
+        } else {
+            reviews = reviewRepo.findAll();
+        }
+        return ResponseEntity.ok(Map.of("reviews", reviews));
+    }
 
     @PostMapping("")
     public ResponseEntity<?> createReview(HttpServletRequest request, @RequestBody Map<String, Object> body) {

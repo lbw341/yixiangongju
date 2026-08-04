@@ -12,7 +12,7 @@
     </div>
     <h3 class="font-bold mt-3 text-lg">{{ tool.name }}</h3>
     <p class="text-sm text-gray-500 mt-1 flex-grow">{{ shortDesc }}</p>
-    <div class="text-xs text-gray-400 mt-4 pt-2 border-t border-gray-100">由 {{ tool.author_name }} 提供</div>
+    <div class="text-xs text-gray-400 mt-4 pt-2 border-t border-gray-100">由 {{ authorName }} 提供</div>
   </div>
 </template>
 
@@ -28,6 +28,7 @@ const props = defineProps({
 const router = useRouter()
 const typeColor = computed(() => getToolTypeColors()[props.tool.type] || 'bg-gray-100 text-gray-800')
 const shortDesc = computed(() => (props.tool.description || '').substring(0, 40) + '...')
+const authorName = computed(() => props.tool.authorName || props.tool.author_name || '')
 
 function goDetail() {
   router.push(`/tools/${props.tool.id}`)

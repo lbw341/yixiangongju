@@ -1,5 +1,6 @@
 <template>
-  <div class="page" v-if="!loading && tool">
+  <div class="page">
+    <div v-if="!loading && tool">
     <button @click="goBack" class="mb-4 inline-flex items-center gap-2 text-gray-600 hover:text-indigo-600 transition">
       <i class="fas fa-arrow-left"></i> 返回
     </button>
@@ -12,7 +13,7 @@
           <span :class="['px-2 py-1 text-xs rounded font-semibold', typeColor]">{{ tool.type }}</span>
           <span v-for="kw in keywords" :key="kw" class="bg-gray-200 text-sm px-2 py-1 rounded">{{ kw }}</span>
         </div>
-        <p class="mt-4 text-gray-500">由 <strong>{{ tool.author_name }}</strong> ({{ tool.department || '' }}) 提供</p>
+        <p class="mt-4 text-gray-500">由 <strong>{{ tool.authorName }}</strong> ({{ tool.department || '' }}) 提供</p>
       </div>
       <div class="flex-shrink-0 mt-4 md:mt-0">
         <div class="text-right">
@@ -30,7 +31,7 @@
           <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><i class="fas fa-tools"></i>工具使用</h2>
 
           <!-- 文字输入 -->
-          <div class="mb-6">
+          <div v-if="isWeeklyGenerator" class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">输入工作内容</label>
             <textarea v-model="workContent" class="w-full border border-gray-300 rounded-lg p-4 resize-none" rows="8" placeholder="请输入本周工作内容，每行一项...&#10;&#10;例如：&#10;- 完成项目需求分析&#10;- 编写技术文档&#10;- 修复线上bug"></textarea>
             <button @click="submitWorkContent" class="mt-3 w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
@@ -130,8 +131,8 @@
         <div class="bg-white rounded-lg shadow-md p-6">
           <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><i class="fas fa-envelope"></i>联系方式</h3>
           <div class="space-y-2 text-sm">
-            <p><strong>邮箱:</strong> <a :href="'mailto:' + (tool.contact_email || 'author@example.com')" class="text-indigo-500">{{ tool.contact_email || 'author@example.com' }}</a></p>
-            <p><strong>手机号:</strong> {{ tool.contact_phone || '未提供' }}</p>
+            <p><strong>邮箱:</strong> <a :href="'mailto:' + (tool.contactEmail || 'author@example.com')" class="text-indigo-500">{{ tool.contactEmail || 'author@example.com' }}</a></p>
+            <p><strong>手机号:</strong> {{ tool.contactPhone || '未提供' }}</p>
           </div>
         </div>
 
@@ -142,7 +143,7 @@
             <div v-for="r in reviews" :key="r.id" class="border-b border-gray-100 pb-2">
               <p class="font-semibold">{{ r.username }}</p>
               <p class="text-sm text-gray-600">"{{ r.content }}"</p>
-              <p class="text-xs text-gray-400 mt-1">{{ r.created_at || '' }}</p>
+              <p class="text-xs text-gray-400 mt-1">{{ formatTime(r.createdAt) }}</p>
             </div>
             <p v-if="reviews.length === 0" class="text-gray-400 text-sm">暂无评价</p>
           </div>
@@ -152,7 +153,9 @@
       </div>
     </div>
   </div>
-  <div v-else-if="error" class="page"><p class="text-red-500">加载失败: {{ error }}</p></div>
+  <div v-else-if="error" class="text-red-500">加载失败: {{ error }}</div>
+    <div v-else class="text-gray-500">加载中...</div>
+  </div>
 </template>
 
 <script setup>
@@ -186,6 +189,7 @@ const uploadResult = ref({ visible: false })
 const typeColor = computed(() => getToolTypeColors()[tool.value?.type] || 'bg-gray-100 text-gray-800')
 const keywords = computed(() => (tool.value?.keywords || '').split(',').filter(k => k.trim()).map(k => k.trim()))
 const reviews = computed(() => tool.value?.reviews || [])
+const isWeeklyGenerator = computed(() => (tool.value?.name || '').includes('周报'))
 
 function goBack() {
   if (window.history.length > 1) router.back()
@@ -335,6 +339,11 @@ async function submitReview() {
     reviewContent.value = ''
     loadTool()
   } catch (e) { showToast(e.message, 'error') }
+}
+
+function formatTime(dt) {
+  if (!dt) return ''
+  return new Date(dt).toLocaleString('zh-CN')
 }
 
 onMounted(loadTool)
