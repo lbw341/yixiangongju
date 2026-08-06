@@ -112,6 +112,39 @@ public class ToolController extends BaseController {
                 .body(resource);
     }
 
+    @GetMapping("/{id}/download_format_template")
+    public ResponseEntity<?> downloadFormatTemplate(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        var tool = toolRepo.findById(id);
+        if (tool.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
+        Tool t = tool.get();
+        if (t.getFormatTemplate() == null || t.getFormatTemplate().isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "该工具没有格式模板"));
+        }
+
+        Path filePath = toolService.getTemplatePath(t.getFormatTemplate());
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.status(404).body(Map.of("error", "格式模板文件不存在"));
+        }
+
+        toolService.updateDownloadStats(id, u.getId());
+
+        Resource resource = new FileSystemResource(filePath.toFile());
+        String contentType;
+        try {
+            contentType = Files.probeContentType(filePath);
+        } catch (Exception e) {
+            contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + t.getFormatTemplate() + "\"")
+                .contentLength(filePath.toFile().length())
+                .body(resource);
+    }
+
     @PostMapping("/create")
     public ResponseEntity<?> createTool(HttpServletRequest request, @RequestParam Map<String, String> form,
                                          @RequestParam(value = "template_file", required = false) MultipartFile file) {
@@ -153,7 +186,10 @@ public class ToolController extends BaseController {
     }
 
     @PutMapping("/{id}/update")
-    public ResponseEntity<?> updateTool(@PathVariable Long id, HttpServletRequest request, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateTool(@PathVariable Long id, HttpServletRequest request,
+                                        @RequestParam Map<String, String> form,
+                                        @RequestParam(value = "file", required = false) MultipartFile file,
+                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile) {
         User u = getCurrentUser(request);
         if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
 
@@ -167,22 +203,45 @@ public class ToolController extends BaseController {
 
         String[] fields = {"name","type","category","keywords","description","department","contact_email","contact_phone","instructions","faq","status"};
         for (String f : fields) {
-            if (body.containsKey(f)) {
+            if (form.containsKey(f)) {
                 switch (f) {
-                    case "name": tool.setName(body.get(f)); break;
-                    case "type": tool.setType(body.get(f)); break;
-                    case "category": tool.setCategory(body.get(f)); break;
-                    case "keywords": tool.setKeywords(body.get(f)); break;
-                    case "description": tool.setDescription(body.get(f)); break;
-                    case "department": tool.setDepartment(body.get(f)); break;
-                    case "contact_email": tool.setContactEmail(body.get(f)); break;
-                    case "contact_phone": tool.setContactPhone(body.get(f)); break;
-                    case "instructions": tool.setInstructions(body.get(f)); break;
-                    case "faq": tool.setFaq(body.get(f)); break;
-                    case "status": tool.setStatus(body.get(f)); break;
+                    case "name": tool.setName(form.get(f)); break;
+                    case "type": tool.setType(form.get(f)); break;
+                    case "category": tool.setCategory(form.get(f)); break;
+                    case "keywords": tool.setKeywords(form.get(f)); break;
+                    case "description": tool.setDescription(form.get(f)); break;
+                    case "department": tool.setDepartment(form.get(f)); break;
+                    case "contact_email": tool.setContactEmail(form.get(f)); break;
+                    case "contact_phone": tool.setContactPhone(form.get(f)); break;
+                    case "instructions": tool.setInstructions(form.get(f)); break;
+                    case "faq": tool.setFaq(form.get(f)); break;
+                    case "status": tool.setStatus(form.get(f)); break;
                 }
             }
         }
+
+        if (file != null && !file.isEmpty()) {
+            try {
+                tool.setTemplateFile(toolService.saveTemplateFile(file));
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
+            }
+        }
+        if ("1".equals(form.get("clear_template"))) {
+            tool.setTemplateFile("");
+        }
+
+        if (formatFile != null && !formatFile.isEmpty()) {
+            try {
+                tool.setFormatTemplate(toolService.saveTemplateFile(formatFile));
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
+            }
+        }
+        if ("1".equals(form.get("clear_format"))) {
+            tool.setFormatTemplate("");
+        }
+
         tool.setUpdatedAt(LocalDateTime.now());
         toolRepo.save(tool);
         return ResponseEntity.ok(Map.of("message", "工具更新成功"));
