@@ -20,6 +20,7 @@ public class Tool {
     private Long authorId;
     private String authorName = "";
     private String templateFile = "";
+    private String formatTemplate = "";
     private String status = "online";
     private int downloads = 0;
     private int calls = 0;
@@ -50,6 +51,8 @@ public class Tool {
     public void setAuthorName(String authorName) { this.authorName = authorName; }
     public String getTemplateFile() { return templateFile; }
     public void setTemplateFile(String templateFile) { this.templateFile = templateFile; }
+    public String getFormatTemplate() { return formatTemplate; }
+    public void setFormatTemplate(String formatTemplate) { this.formatTemplate = formatTemplate; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public int getDownloads() { return downloads; }
