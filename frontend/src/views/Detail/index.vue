@@ -43,8 +43,11 @@
           <div class="border-t border-gray-200 pt-4">
             <p class="text-sm text-gray-500 mb-3">或使用文件方式：</p>
             <div class="border rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-              <button @click="downloadTemplate" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
-                <i class="fas fa-download"></i> 下载模板
+              <button v-if="tool.templateFile" @click="downloadTemplate('template')" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+                <i class="fas fa-download"></i> 下载脚本模板
+              </button>
+              <button v-if="tool.formatTemplate" @click="downloadTemplate('format')" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+                <i class="fas fa-download"></i> 下载格式模板
               </button>
               <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fas fa-upload"></i> 上传文件（支持压缩包）
@@ -286,10 +289,13 @@ async function onFileUpload(event) {
   event.target.value = ''
 }
 
-async function downloadTemplate() {
+async function downloadTemplate(kind) {
   if (!userStore.token) return showToast('请先登录', 'error')
+  const url = kind === 'format'
+    ? `/api/tools/${toolId.value}/download_format_template`
+    : `/api/tools/${toolId.value}/download_template`
   try {
-    const res = await fetch(`/api/tools/${toolId.value}/download_template`, {
+    const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${userStore.token}` }
     })
     if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
