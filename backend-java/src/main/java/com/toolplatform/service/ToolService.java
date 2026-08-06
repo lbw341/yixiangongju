@@ -463,8 +463,9 @@ public class ToolService {
                 String originalName = entry.getKey();
                 int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
                 String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
-                if (fileName.contains("/") || fileName.contains("\\") || fileName.contains(":")) {
-                    fileName = fileName.replaceAll("[/:*?\"<>|]", "_");
+                fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+                if (fileName.isEmpty() || ".".equals(fileName) || "..".equals(fileName)) {
+                    fileName = "file_" + Math.abs(originalName.hashCode());
                 }
                 Path dataFile = dataDir.resolve(fileName);
                 Files.write(dataFile, entry.getValue());
@@ -506,14 +507,22 @@ public class ToolService {
                 String line;
                 int lineCount = 0;
                 long charCount = 0;
-                while ((line = reader.readLine()) != null && lineCount < 5000 && charCount < 1000000) {
-                    output.append(line).append("\n");
-                    lineCount++;
-                    charCount += line.length();
+                boolean linesTruncated = false;
+                boolean charsTruncated = false;
+                while ((line = reader.readLine()) != null) {
+                    if (lineCount < 5000 && charCount < 1000000) {
+                        output.append(line).append("\n");
+                        lineCount++;
+                        charCount += line.length();
+                    } else if (lineCount >= 5000) {
+                        linesTruncated = true;
+                    } else {
+                        charsTruncated = true;
+                    }
                 }
-                if (lineCount >= 5000) {
+                if (linesTruncated) {
                     output.append("\n[输出行数过多，已截断]\n");
-                } else if (charCount >= 1000000) {
+                } else if (charsTruncated) {
                     output.append("\n[输出内容过大，已截断]\n");
                 }
             } catch (IOException e) {}
@@ -521,10 +530,12 @@ public class ToolService {
         readerThread.start();
 
         boolean completed = process.waitFor(120, TimeUnit.SECONDS);
-        readerThread.join(2000);
-
         if (!completed) {
             process.destroyForcibly();
+        }
+        readerThread.join();
+
+        if (!completed) {
             deleteDirectory(workDir.toFile());
             return "执行超时 (超过120秒)\n" + output.toString();
         }

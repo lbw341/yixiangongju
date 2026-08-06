@@ -220,26 +220,27 @@ public class ToolController extends BaseController {
             }
         }
 
-        if (file != null && !file.isEmpty()) {
+        boolean clearTemplate = "1".equals(form.get("clear_template"));
+        boolean clearFormat = "1".equals(form.get("clear_format"));
+
+        if (clearTemplate) {
+            tool.setTemplateFile("");
+        } else if (file != null && !file.isEmpty()) {
             try {
                 tool.setTemplateFile(toolService.saveTemplateFile(file));
             } catch (IOException e) {
                 return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
             }
         }
-        if ("1".equals(form.get("clear_template"))) {
-            tool.setTemplateFile("");
-        }
 
-        if (formatFile != null && !formatFile.isEmpty()) {
+        if (clearFormat) {
+            tool.setFormatTemplate("");
+        } else if (formatFile != null && !formatFile.isEmpty()) {
             try {
                 tool.setFormatTemplate(toolService.saveTemplateFile(formatFile));
             } catch (IOException e) {
                 return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
             }
-        }
-        if ("1".equals(form.get("clear_format"))) {
-            tool.setFormatTemplate("");
         }
 
         tool.setUpdatedAt(LocalDateTime.now());
