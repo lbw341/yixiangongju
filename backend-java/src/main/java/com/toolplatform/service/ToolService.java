@@ -343,6 +343,7 @@ public class ToolService {
 
     /**
      * 处理上传的文件
+     * 优先执行工具的脚本模板，其次生成通用周报；结果套用格式模板输出
      */
     public FileProcessResult processUploadedFiles(Long toolId, Long userId, MultipartFile[] files) throws IOException {
         String timestamp = String.valueOf(System.currentTimeMillis());
@@ -351,11 +352,11 @@ public class ToolService {
 
         updateCallStats(toolId);
 
+        Tool tool = toolRepo.findById(toolId).orElse(null);
+
         StringBuilder allContent = new StringBuilder();
         List<String> processedFiles = new ArrayList<>();
-        Map<String, String> allPythonFiles = new LinkedHashMap<>();
         Map<String, byte[]> allDataFiles = new LinkedHashMap<>();
-        StringBuilder pyOutput = new StringBuilder();
 
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;
@@ -372,58 +373,169 @@ public class ToolService {
                 ZipExtractResult zipResult = extractZipContent(file.getInputStream());
                 allContent.append(zipResult.getContent());
                 processedFiles.addAll(zipResult.getProcessedFiles());
-                allPythonFiles.putAll(zipResult.getPythonFiles());
                 allDataFiles.putAll(zipResult.getDataFiles());
-            } else if ("txt".equalsIgnoreCase(ext) || "md".equalsIgnoreCase(ext) || "log".equalsIgnoreCase(ext) || "json".equalsIgnoreCase(ext) || "csv".equalsIgnoreCase(ext)) {
-                byte[] fileBytes = file.getInputStream().readAllBytes();
-                String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
-                allContent.append("===== 文件: ").append(originalName).append(" =====\n");
-                allContent.append(fileContent);
-                allContent.append("\n\n");
-                processedFiles.add(originalName);
-                allDataFiles.put(originalName, fileBytes);
+                for (Map.Entry<String, String> py : zipResult.getPythonFiles().entrySet()) {
+                    allDataFiles.put(py.getKey(), py.getValue().getBytes(StandardCharsets.UTF_8));
+                }
             } else if ("xlsx".equalsIgnoreCase(ext) || "xls".equalsIgnoreCase(ext)) {
                 byte[] fileBytes = file.getInputStream().readAllBytes();
                 String excelContent = readExcelContent(new ByteArrayInputStream(fileBytes));
                 allContent.append("===== Excel文件: ").append(originalName).append(" =====\n");
-                allContent.append(excelContent);
-                allContent.append("\n\n");
+                allContent.append(excelContent).append("\n\n");
                 processedFiles.add(originalName);
                 allDataFiles.put(originalName, fileBytes);
-            } else if ("py".equalsIgnoreCase(ext)) {
-                String code = new String(file.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-                allPythonFiles.put(originalName, code);
+            } else {
+                byte[] fileBytes = file.getInputStream().readAllBytes();
+                String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
+                allContent.append("===== 文件: ").append(originalName).append(" =====\n");
+                allContent.append(fileContent).append("\n\n");
                 processedFiles.add(originalName);
+                allDataFiles.put(originalName, fileBytes);
+            }
+        }
+
+        String resultContent = "";
+
+        String scriptFile = null;
+        String formatFile = null;
+        if (tool != null) {
+            String tf = tool.getTemplateFile();
+            String ff = tool.getFormatTemplate();
+            if (tf != null && tf.toLowerCase().endsWith(".py")) {
+                scriptFile = tf;
+                formatFile = (ff != null && !ff.isEmpty()) ? ff : null;
+            } else {
+                formatFile = (ff != null && !ff.isEmpty()) ? ff : ((tf != null && !tf.isEmpty()) ? tf : null);
+            }
+        }
+
+        boolean scriptExecuted = false;
+        if (scriptFile != null && Files.exists(getTemplatePath(scriptFile))) {
+            try {
+                resultContent = runScriptTemplate(getTemplatePath(scriptFile), allDataFiles);
+                scriptExecuted = true;
+            } catch (Exception e) {
+                resultContent = "脚本执行失败: " + e.getMessage();
+                scriptExecuted = true;
+            }
+        } else if (allContent.length() > 0) {
+            resultContent = generateWeeklyReport(allContent.toString());
+        }
+
+        if (formatFile != null && Files.exists(getTemplatePath(formatFile))) {
+            String format = Files.readString(getTemplatePath(formatFile), StandardCharsets.UTF_8);
+            if (format.contains("{{result}}")) {
+                resultContent = format.replace("{{result}}", resultContent);
+            } else if (!resultContent.trim().isEmpty()) {
+                resultContent = format + "\n" + resultContent;
+            } else {
+                resultContent = format;
             }
         }
 
         FileProcessResult result = new FileProcessResult();
         result.setResultName(resultName);
         result.setProcessedFiles(processedFiles);
-
-        if (!allPythonFiles.isEmpty()) {
-            for (Map.Entry<String, String> entry : allPythonFiles.entrySet()) {
-                pyOutput.append("===== Python文件: ").append(entry.getKey()).append(" =====\n");
-                try {
-                    String output = executePythonCode(entry.getValue(), allDataFiles);
-                    pyOutput.append(output);
-                } catch (Exception e) {
-                    pyOutput.append("执行错误: ").append(e.getMessage());
-                }
-                pyOutput.append("\n\n");
-            }
-            Files.writeString(resultPath, pyOutput.toString(), StandardCharsets.UTF_8);
-            result.setPythonOutput(pyOutput.toString());
+        if (scriptExecuted) {
+            result.setPythonOutput(resultContent);
             result.setPythonExecuted(true);
-            return result;
         }
 
-        if (allContent.length() > 0) {
-            String weeklyReport = generateWeeklyReport(allContent.toString());
-            Files.writeString(resultPath, weeklyReport, StandardCharsets.UTF_8);
+        if (!resultContent.trim().isEmpty()) {
+            Files.writeString(resultPath, resultContent, StandardCharsets.UTF_8);
         }
 
         return result;
+    }
+
+    /**
+     * 运行工具的脚本模板
+     * 约定: python -u <script> <数据目录> <文件1> <文件2> ...
+     */
+    private String runScriptTemplate(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        Path workDir = Files.createTempDirectory("tool_script_");
+        Path dataDir = workDir.resolve("data");
+        List<String> dataFilePaths = new ArrayList<>();
+
+        if (dataFiles != null && !dataFiles.isEmpty()) {
+            Files.createDirectories(dataDir);
+            for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
+                String originalName = entry.getKey();
+                int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
+                String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
+                if (fileName.contains("/") || fileName.contains("\\") || fileName.contains(":")) {
+                    fileName = fileName.replaceAll("[/:*?\"<>|]", "_");
+                }
+                Path dataFile = dataDir.resolve(fileName);
+                Files.write(dataFile, entry.getValue());
+                dataFilePaths.add(dataFile.toString());
+            }
+        }
+
+        String pythonCmd = findPythonCommand();
+        if (pythonCmd == null) {
+            deleteDirectory(workDir.toFile());
+            return "错误: 服务端未安装Python或Python未添加到环境变量";
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add(pythonCmd);
+        command.add("-u");
+        command.add(scriptFile.toString());
+        if (!dataFilePaths.isEmpty()) {
+            command.add(dataDir.toString());
+            command.addAll(dataFilePaths);
+        }
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        pb.directory(workDir.toFile());
+
+        Map<String, String> env = pb.environment();
+        env.put("PYTHONIOENCODING", "utf-8");
+        env.put("PYTHONUTF8", "1");
+
+        Process process = pb.start();
+
+        StringBuilder output = new StringBuilder();
+        InputStream rawStream = process.getInputStream();
+
+        Thread readerThread = new Thread(() -> {
+            try {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(rawStream, StandardCharsets.UTF_8));
+                String line;
+                int lineCount = 0;
+                long charCount = 0;
+                while ((line = reader.readLine()) != null && lineCount < 5000 && charCount < 1000000) {
+                    output.append(line).append("\n");
+                    lineCount++;
+                    charCount += line.length();
+                }
+                if (lineCount >= 5000) {
+                    output.append("\n[输出行数过多，已截断]\n");
+                } else if (charCount >= 1000000) {
+                    output.append("\n[输出内容过大，已截断]\n");
+                }
+            } catch (IOException e) {}
+        });
+        readerThread.start();
+
+        boolean completed = process.waitFor(120, TimeUnit.SECONDS);
+        readerThread.join(2000);
+
+        if (!completed) {
+            process.destroyForcibly();
+            deleteDirectory(workDir.toFile());
+            return "执行超时 (超过120秒)\n" + output.toString();
+        }
+
+        int exitCode = process.exitValue();
+        deleteDirectory(workDir.toFile());
+
+        if (exitCode != 0) {
+            return "执行错误 (Exit code: " + exitCode + ")\n" + output.toString();
+        }
+        return output.toString();
     }
 
     /**
