@@ -33,8 +33,14 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">上传文件</label>
-          <input type="file" @change="onFileChange" required class="w-full border border-gray-300 rounded-lg p-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板 (.py)</label>
+          <input type="file" accept=".py" @change="onScriptChange" class="w-full border border-gray-300 rounded-lg p-3">
+          <p class="text-xs text-gray-400 mt-1">可选：Python 脚本，用于处理用户上传的数据。约定：sys.argv[1] 为数据目录，sys.argv[2:] 为文件路径列表，结果打印到 stdout</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">文档格式模板</label>
+          <input type="file" accept=".txt,.md,.html,.log,.csv" @change="onFormatChange" class="w-full border border-gray-300 rounded-lg p-3">
+          <p class="text-xs text-gray-400 mt-1">可选：结果输出版式，含 {{ '{{' }}result}} 占位符则替换为处理结果</p>
         </div>
         <div class="md:col-span-2">
           <label class="block text-sm font-medium text-gray-700 mb-1">工具描述</label>
@@ -66,19 +72,25 @@ const { showToast } = useToast()
 const form = reactive({
   name: '', type: 'python', category: '规划', description: '', instructions: ''
 })
-const selectedFile = ref(null)
+const scriptFile = ref(null)
+const formatFile = ref(null)
 const uploading = ref(false)
 
-function onFileChange(e) {
-  selectedFile.value = e.target.files[0]
+function onScriptChange(e) {
+  scriptFile.value = e.target.files[0] || null
+}
+
+function onFormatChange(e) {
+  formatFile.value = e.target.files[0] || null
 }
 
 async function handleUpload() {
-  if (!selectedFile.value) return showToast('请选择文件', 'error')
+  if (!scriptFile.value && !formatFile.value) return showToast('请至少上传一个模板文件', 'error')
   uploading.value = true
   try {
     const fd = new FormData()
-    fd.append('file', selectedFile.value)
+    if (scriptFile.value) fd.append('file', scriptFile.value)
+    if (formatFile.value) fd.append('format_file', formatFile.value)
     fd.append('name', form.name)
     fd.append('type', form.type)
     fd.append('category', form.category)
@@ -88,7 +100,8 @@ async function handleUpload() {
     await request('/api/tools', { method: 'POST', body: fd })
     showToast('工具上传成功')
     Object.assign(form, { name: '', type: 'python', category: '规划', description: '', instructions: '' })
-    selectedFile.value = null
+    scriptFile.value = null
+    formatFile.value = null
     router.push('/manage')
   } catch (e) {
     showToast(e.message, 'error')
