@@ -481,7 +481,7 @@ public class ToolService {
         List<String> command = new ArrayList<>();
         command.add(pythonCmd);
         command.add("-u");
-        command.add(scriptFile.toString());
+        command.add(scriptFile.toAbsolutePath().toString());
         if (!dataFilePaths.isEmpty()) {
             command.add(dataDir.toString());
             command.addAll(dataFilePaths);
