@@ -236,7 +236,8 @@ public class ToolController extends BaseController {
     @PostMapping("")
     public ResponseEntity<?> uploadTool(HttpServletRequest request,
                                         @RequestParam Map<String, String> form,
-                                        @RequestParam(value = "file", required = false) MultipartFile file) {
+                                        @RequestParam(value = "file", required = false) MultipartFile file,
+                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile) {
         User u = getCurrentUser(request);
         if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
 
@@ -267,6 +268,15 @@ public class ToolController extends BaseController {
                 tool.setTemplateFile(uniqueName);
             } catch (IOException e) {
                 return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
+            }
+        }
+
+        if (formatFile != null && !formatFile.isEmpty()) {
+            try {
+                String uniqueName = toolService.saveTemplateFile(formatFile);
+                tool.setFormatTemplate(uniqueName);
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
             }
         }
 
@@ -356,6 +366,7 @@ public class ToolController extends BaseController {
         m.put("authorId", t.getAuthorId());
         m.put("authorName", t.getAuthorName());
         m.put("templateFile", t.getTemplateFile());
+        m.put("formatTemplate", t.getFormatTemplate());
         m.put("status", t.getStatus());
         m.put("downloads", t.getDownloads());
         m.put("calls", t.getCalls());
