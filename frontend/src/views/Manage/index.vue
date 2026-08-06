@@ -95,6 +95,26 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">常见问题</label>
             <textarea v-model="editForm.faq" rows="2" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
           </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板 (.py)</label>
+            <div class="flex items-center gap-2">
+              <input type="file" accept=".py" @change="e => editScriptFile = e.target.files[0] || null" class="w-full border border-gray-300 rounded-lg p-2">
+              <span v-if="editing.templateFile" class="text-xs text-gray-500 whitespace-nowrap">{{ editing.templateFile }}</span>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-500 mt-1 cursor-pointer">
+              <input type="checkbox" v-model="clearScript"> 清除脚本模板
+            </label>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">文档格式模板</label>
+            <div class="flex items-center gap-2">
+              <input type="file" accept=".txt,.md,.html,.log,.csv" @change="e => editFormatFile = e.target.files[0] || null" class="w-full border border-gray-300 rounded-lg p-2">
+              <span v-if="editing.formatTemplate" class="text-xs text-gray-500 whitespace-nowrap">{{ editing.formatTemplate }}</span>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-500 mt-1 cursor-pointer">
+              <input type="checkbox" v-model="clearFormat"> 清除格式模板
+            </label>
+          </div>
           <div class="md:col-span-2 flex justify-end gap-2">
             <button type="button" @click="editing = null" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition">取消</button>
             <button type="submit" :disabled="saving" class="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition disabled:opacity-50">
@@ -120,6 +140,10 @@ const myTools = ref([])
 const editing = ref(null)
 const saving = ref(false)
 const editForm = reactive({})
+const editScriptFile = ref(null)
+const editFormatFile = ref(null)
+const clearScript = ref(false)
+const clearFormat = ref(false)
 
 function toolStatusColor(status) {
   return status === 'online' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
@@ -138,13 +162,23 @@ function openEdit(tool) {
     instructions: tool.instructions || '',
     faq: tool.faq || ''
   })
+  editScriptFile.value = null
+  editFormatFile.value = null
+  clearScript.value = false
+  clearFormat.value = false
   editing.value = tool
 }
 
 async function saveEdit() {
   saving.value = true
   try {
-    await request(`/api/tools/${editing.value.id}/update`, { method: 'PUT', json: { ...editForm } })
+    const fd = new FormData()
+    Object.entries(editForm).forEach(([k, v]) => fd.append(k, v ?? ''))
+    if (editScriptFile.value) fd.append('file', editScriptFile.value)
+    if (editFormatFile.value) fd.append('format_file', editFormatFile.value)
+    if (clearScript.value) fd.append('clear_template', '1')
+    if (clearFormat.value) fd.append('clear_format', '1')
+    await request(`/api/tools/${editing.value.id}/update`, { method: 'PUT', body: fd })
     showToast('工具更新成功')
     editing.value = null
     loadMyTools()
