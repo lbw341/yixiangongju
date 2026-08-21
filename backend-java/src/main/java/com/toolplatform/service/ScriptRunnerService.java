@@ -70,7 +70,7 @@ public class ScriptRunnerService {
 
             Process process = pb.start();
 
-            StringBuilder output = new StringBuilder();
+            StringBuffer output = new StringBuffer();
             Thread readerThread = startOutputReader(process.getInputStream(), output);
 
             boolean completed = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -159,7 +159,7 @@ public class ScriptRunnerService {
     /**
      * 后台线程读取合并输出，超限截断。设为守护线程避免阻塞 JVM 退出。
      */
-    private Thread startOutputReader(InputStream stream, StringBuilder output) {
+    private Thread startOutputReader(InputStream stream, StringBuffer output) {
         Thread t = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
                 String line;
