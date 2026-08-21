@@ -473,7 +473,7 @@ spring.servlet.multipart.max-request-size=100MB
 **解决方案：**
 1. 确认数据库字符集为 `utf8mb4`
 2. 确认 MySQL 连接 URL 包含 `characterEncoding=utf8`
-3. Python 代码执行乱码：后端在 `ToolService.executePythonCode` 中通过 `ProcessBuilder` 设置了两个环境变量：
+3. Python 代码执行乱码：后端在 `ScriptRunnerService.run` 中通过 `ProcessBuilder` 设置了两个环境变量：
    - `PYTHONIOENCODING=utf-8` — 强制 Python 的 stdin/stdout/stderr 使用 UTF-8 编码
    - `PYTHONUTF8=1` — 启用 Python UTF-8 模式（Python 3.7+），让所有文件 I/O 默认使用 UTF-8
    - Java 端使用 `StandardCharsets.UTF_8` 读取 Python 进程输出，确保编码一致
