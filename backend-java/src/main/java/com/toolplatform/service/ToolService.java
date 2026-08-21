@@ -2,18 +2,21 @@ package com.toolplatform.service;
 
 import com.toolplatform.entity.*;
 import com.toolplatform.repository.*;
+import com.toolplatform.service.ScriptRunnerService.ScriptRunResult;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -37,11 +40,14 @@ public class ToolService {
     private final ToolRepository toolRepo;
     private final DownloadStatRepository statRepo;
     private final UserToolUsageRepository usageRepo;
+    private final ScriptRunnerService scriptRunner;
 
-    public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo) {
+    public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
+                       ScriptRunnerService scriptRunner) {
         this.toolRepo = toolRepo;
         this.statRepo = statRepo;
         this.usageRepo = usageRepo;
+        this.scriptRunner = scriptRunner;
     }
 
     /**
@@ -150,114 +156,6 @@ public class ToolService {
         }
 
         return content.toString();
-    }
-
-    /**
-     * 执行Python代码
-     */
-    public String executePythonCode(String code, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        Path workDir = Files.createTempDirectory("python_work_");
-        Path scriptFile = workDir.resolve("script.py");
-
-        String preamble = "# -*- coding: utf-8 -*-\n";
-        Files.writeString(scriptFile, preamble + code, StandardCharsets.UTF_8);
-
-        Path dataDir = workDir.resolve("data");
-        List<String> dataFilePaths = new ArrayList<>();
-
-        if (dataFiles != null && !dataFiles.isEmpty()) {
-            Files.createDirectories(dataDir);
-            for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
-                String originalName = entry.getKey();
-                int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
-                String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
-                if (fileName.contains("/") || fileName.contains("\\") || fileName.contains(":")) {
-                    fileName = fileName.replaceAll("[/:*?\"<>|]", "_");
-                }
-                Path dataFile = dataDir.resolve(fileName);
-                Files.write(dataFile, entry.getValue());
-                dataFilePaths.add(dataFile.toString());
-            }
-        }
-
-        String pythonCmd = findPythonCommand();
-        if (pythonCmd == null) {
-            deleteDirectory(workDir.toFile());
-            return "错误: 服务端未安装Python或Python未添加到环境变量";
-        }
-
-        List<String> command = new ArrayList<>();
-        command.add(pythonCmd);
-        command.add("-u");
-        command.add(scriptFile.toString());
-
-        if (!dataFilePaths.isEmpty()) {
-            command.add(dataDir.toString());
-            command.addAll(dataFilePaths);
-        }
-
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.redirectErrorStream(true);
-        pb.directory(workDir.toFile());
-
-        Map<String, String> env = pb.environment();
-        env.put("PYTHONIOENCODING", "utf-8");
-        env.put("PYTHONUTF8", "1");
-
-        Process process = pb.start();
-
-        if (!dataFilePaths.isEmpty()) {
-            try (OutputStream os = process.getOutputStream();
-                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8))) {
-                writer.write(dataDir.toString());
-                writer.newLine();
-                for (String path : dataFilePaths) {
-                    writer.write(path);
-                    writer.newLine();
-                }
-                writer.flush();
-            }
-        }
-
-        StringBuilder output = new StringBuilder();
-        InputStream rawStream = process.getInputStream();
-
-        Thread readerThread = new Thread(() -> {
-            try {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(rawStream, StandardCharsets.UTF_8));
-                String line;
-                int lineCount = 0;
-                long charCount = 0;
-                while ((line = reader.readLine()) != null && lineCount < 5000 && charCount < 1000000) {
-                    output.append(line).append("\n");
-                    lineCount++;
-                    charCount += line.length();
-                }
-                if (lineCount >= 5000) {
-                    output.append("\n[输出行数过多，已截断]\n");
-                } else if (charCount >= 1000000) {
-                    output.append("\n[输出内容过大，已截断]\n");
-                }
-            } catch (IOException e) {}
-        });
-        readerThread.start();
-
-        boolean completed = process.waitFor(120, TimeUnit.SECONDS);
-        readerThread.join(2000);
-
-        if (!completed) {
-            process.destroyForcibly();
-            deleteDirectory(workDir.toFile());
-            return "执行超时 (超过120秒)\n" + output.toString();
-        }
-
-        int exitCode = process.exitValue();
-        deleteDirectory(workDir.toFile());
-
-        if (exitCode != 0) {
-            return "执行错误 (Exit code: " + exitCode + ")\n" + output.toString();
-        }
-        return output.toString();
     }
 
     /**
@@ -449,104 +347,21 @@ public class ToolService {
     }
 
     /**
-     * 运行工具的脚本模板
-     * 约定: python -u <script> <数据目录> <文件1> <文件2> ...
+     * 运行工具的脚本模板并组装用户可见的结果文本
+     * 约定: sys.argv[1] 恒为数据目录，sys.argv[2:] 为数据文件列表（可为空）
      */
     private String runScriptTemplate(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        Path workDir = Files.createTempDirectory("tool_script_");
-        Path dataDir = workDir.resolve("data");
-        List<String> dataFilePaths = new ArrayList<>();
-
-        if (dataFiles != null && !dataFiles.isEmpty()) {
-            Files.createDirectories(dataDir);
-            for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
-                String originalName = entry.getKey();
-                int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
-                String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
-                fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-                if (fileName.isEmpty() || ".".equals(fileName) || "..".equals(fileName)) {
-                    fileName = "file_" + Math.abs(originalName.hashCode());
-                }
-                Path dataFile = dataDir.resolve(fileName);
-                Files.write(dataFile, entry.getValue());
-                dataFilePaths.add(dataFile.toString());
-            }
-        }
-
-        String pythonCmd = findPythonCommand();
-        if (pythonCmd == null) {
-            deleteDirectory(workDir.toFile());
+        ScriptRunResult r = scriptRunner.run(scriptFile, dataFiles);
+        if (!r.isPythonFound()) {
             return "错误: 服务端未安装Python或Python未添加到环境变量";
         }
-
-        List<String> command = new ArrayList<>();
-        command.add(pythonCmd);
-        command.add("-u");
-        command.add(scriptFile.toAbsolutePath().toString());
-        if (!dataFilePaths.isEmpty()) {
-            command.add(dataDir.toString());
-            command.addAll(dataFilePaths);
+        if (r.isTimedOut()) {
+            return "执行超时 (超过120秒)\n" + r.getOutput();
         }
-
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.redirectErrorStream(true);
-        pb.directory(workDir.toFile());
-
-        Map<String, String> env = pb.environment();
-        env.put("PYTHONIOENCODING", "utf-8");
-        env.put("PYTHONUTF8", "1");
-
-        Process process = pb.start();
-
-        StringBuilder output = new StringBuilder();
-        InputStream rawStream = process.getInputStream();
-
-        Thread readerThread = new Thread(() -> {
-            try {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(rawStream, StandardCharsets.UTF_8));
-                String line;
-                int lineCount = 0;
-                long charCount = 0;
-                boolean linesTruncated = false;
-                boolean charsTruncated = false;
-                while ((line = reader.readLine()) != null) {
-                    if (lineCount < 5000 && charCount < 1000000) {
-                        output.append(line).append("\n");
-                        lineCount++;
-                        charCount += line.length();
-                    } else if (lineCount >= 5000) {
-                        linesTruncated = true;
-                    } else {
-                        charsTruncated = true;
-                    }
-                }
-                if (linesTruncated) {
-                    output.append("\n[输出行数过多，已截断]\n");
-                } else if (charsTruncated) {
-                    output.append("\n[输出内容过大，已截断]\n");
-                }
-            } catch (IOException e) {}
-        });
-        readerThread.start();
-
-        boolean completed = process.waitFor(120, TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroyForcibly();
+        if (r.getExitCode() != 0) {
+            return "执行错误 (Exit code: " + r.getExitCode() + ")\n" + r.getOutput();
         }
-        readerThread.join();
-
-        if (!completed) {
-            deleteDirectory(workDir.toFile());
-            return "执行超时 (超过120秒)\n" + output.toString();
-        }
-
-        int exitCode = process.exitValue();
-        deleteDirectory(workDir.toFile());
-
-        if (exitCode != 0) {
-            return "执行错误 (Exit code: " + exitCode + ")\n" + output.toString();
-        }
-        return output.toString();
+        return r.getOutput();
     }
 
     /**
@@ -648,41 +463,6 @@ public class ToolService {
         return Paths.get(templateDir, templateFile);
     }
 
-    private String findPythonCommand() {
-        String[] candidates = {"python", "python3", "py"};
-        for (String cmd : candidates) {
-            try {
-                ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
-                Process p = pb.start();
-                if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0) {
-                    return cmd;
-                }
-            } catch (Exception e) {}
-        }
-
-        String[] paths = {
-                "C:\\Python39\\python.exe",
-                "C:\\Python310\\python.exe",
-                "C:\\Python311\\python.exe",
-                "C:\\Python312\\python.exe",
-                "C:\\Program Files\\Python39\\python.exe",
-                "C:\\Program Files\\Python310\\python.exe",
-                "C:\\Program Files\\Python311\\python.exe",
-                "C:\\Program Files\\Python312\\python.exe",
-                "C:\\Program Files (x86)\\Python39\\python.exe",
-                "C:\\Program Files (x86)\\Python310\\python.exe",
-                "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-                "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
-        };
-        for (String path : paths) {
-            if (new File(path).exists()) {
-                return path;
-            }
-        }
-
-        return null;
-    }
-
     private String decodeTextContent(byte[] bytes) {
         return decodeOutput(bytes);
     }
@@ -690,21 +470,25 @@ public class ToolService {
     private String decodeOutput(byte[] bytes) {
         if (bytes.length == 0) return "";
 
-        Charset gbk = Charset.forName("GBK");
-        try {
-            return new String(bytes, gbk);
-        } catch (Exception e) {
-            return new String(bytes, StandardCharsets.UTF_8);
-        }
+        String utf8 = decodeStrict(bytes, StandardCharsets.UTF_8);
+        if (utf8 != null) return utf8;
+
+        String gbk = decodeStrict(bytes, Charset.forName("GBK"));
+        if (gbk != null) return gbk;
+
+        return new String(bytes, Charset.forName("GB18030"));
     }
 
-    private void deleteDirectory(File dir) {
-        if (dir.isDirectory()) {
-            for (File child : dir.listFiles()) {
-                deleteDirectory(child);
-            }
+    private String decodeStrict(byte[] bytes, Charset charset) {
+        try {
+            return charset.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString();
+        } catch (CharacterCodingException e) {
+            return null;
         }
-        dir.delete();
     }
 
     /**
