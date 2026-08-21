@@ -88,9 +88,9 @@
 
 ### 脚本模板执行细节
 
-- 复用现有 Python 命令探测（`findPythonCommand`）、`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1` 环境变量、超时与输出截断逻辑。
-- 数据文件统一写入临时目录，文件路径作为 argv 传入脚本：`python -u <script> <dataDir> <file1> <file2> ...`。
-- 脚本约定写入使用说明：`sys.argv[1]` 为数据目录，`sys.argv[2:]` 为文件路径列表，结果打印到 stdout。
+- Python 命令探测、`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1` 环境变量、超时与输出截断逻辑由 `ScriptRunnerService` 统一提供（见 `2026-08-21-script-runner-refactor-design.md`）。
+- 数据文件统一写入临时目录，文件路径作为 argv 传入脚本：`python -u <script> <dataDir> [file1] [file2] ...`；**数据目录参数恒定传入**（即使无数据文件）。
+- 脚本约定写入使用说明：`sys.argv[1]` 恒为数据目录，`sys.argv[2:]` 为文件路径列表（可为空），结果打印到 stdout。
 
 ### 兼容性
 
