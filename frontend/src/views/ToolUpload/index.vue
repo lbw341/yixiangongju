@@ -33,9 +33,15 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板 (.py)</label>
-          <input type="file" accept=".py" @change="onScriptChange" class="w-full border border-gray-300 rounded-lg p-3">
-          <p class="text-xs text-gray-400 mt-1">可选：Python 脚本，用于处理用户上传的数据。约定：sys.argv[1] 为数据目录，sys.argv[2:] 为文件路径列表，结果打印到 stdout</p>
+          <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板（多选或单个 zip 包）</label>
+          <input type="file" accept=".py,.txt,.zip" multiple @change="onScriptChange" class="w-full border border-gray-300 rounded-lg p-3">
+          <ul v-if="scriptFiles.length" class="mt-2 flex flex-wrap gap-2">
+            <li v-for="(f, i) in scriptFiles" :key="f.name + i" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded">
+              {{ f.name }}
+              <button type="button" @click="removeScriptFile(i)" class="text-indigo-400 hover:text-red-500">&times;</button>
+            </li>
+          </ul>
+          <p class="text-xs text-gray-400 mt-1">可选：多个 .py/.txt 文件或单个 .zip（支持文件夹结构）。含 requirements.txt 时创建工具会自动安装依赖。约定：sys.argv[1] 为数据目录，sys.argv[2:] 为文件路径列表，结果打印到 stdout</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">文档格式模板</label>
@@ -72,12 +78,29 @@ const { showToast } = useToast()
 const form = reactive({
   name: '', type: 'python', category: '规划', description: '', instructions: ''
 })
-const scriptFile = ref(null)
+const BLOCKED_EXT = ['exe', 'dll', 'bat', 'cmd', 'ps1', 'msi', 'scr', 'com', 'jar']
+const scriptFiles = ref([])
 const formatFile = ref(null)
 const uploading = ref(false)
 
 function onScriptChange(e) {
-  scriptFile.value = e.target.files[0] || null
+  const picked = Array.from(e.target.files || [])
+  e.target.value = ''
+  if (!picked.length) return
+  const zips = picked.filter(f => f.name.toLowerCase().endsWith('.zip'))
+  if (zips.length > 1 || (zips.length === 1 && picked.length > 1)) {
+    return showToast('zip 包必须单独上传，不能与其他文件同时选择', 'error')
+  }
+  const dup = picked.find((f, i) => picked.findIndex(g => g.name.toLowerCase() === f.name.toLowerCase()) !== i)
+    || scriptFiles.value.find(f => picked.some(g => g.name.toLowerCase() === f.name.toLowerCase()))
+  if (dup) return showToast('存在重名文件: ' + dup.name, 'error')
+  const bad = picked.find(f => BLOCKED_EXT.some(ext => f.name.toLowerCase().endsWith('.' + ext)))
+  if (bad) return showToast('不允许的可执行文件: ' + bad.name, 'error')
+  scriptFiles.value.push(...picked)
+}
+
+function removeScriptFile(i) {
+  scriptFiles.value.splice(i, 1)
 }
 
 function onFormatChange(e) {
@@ -85,11 +108,11 @@ function onFormatChange(e) {
 }
 
 async function handleUpload() {
-  if (!scriptFile.value && !formatFile.value) return showToast('请至少上传一个模板文件', 'error')
+  if (!scriptFiles.value.length && !formatFile.value) return showToast('请至少上传一个模板文件', 'error')
   uploading.value = true
   try {
     const fd = new FormData()
-    if (scriptFile.value) fd.append('file', scriptFile.value)
+    scriptFiles.value.forEach(f => fd.append('files', f))
     if (formatFile.value) fd.append('format_file', formatFile.value)
     fd.append('name', form.name)
     fd.append('type', form.type)
@@ -100,7 +123,7 @@ async function handleUpload() {
     await request('/api/tools', { method: 'POST', body: fd })
     showToast('工具上传成功')
     Object.assign(form, { name: '', type: 'python', category: '规划', description: '', instructions: '' })
-    scriptFile.value = null
+    scriptFiles.value = []
     formatFile.value = null
     router.push('/manage')
   } catch (e) {
