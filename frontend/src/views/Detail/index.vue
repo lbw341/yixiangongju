@@ -50,15 +50,26 @@
                 <i class="fas fa-download"></i> 下载格式模板
               </button>
               <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
-                <i class="fas fa-upload"></i> 上传文件（支持压缩包）
-                <input type="file" class="sr-only" @change="onFileUpload" accept=".xlsx,.csv,.json,.zip,.py,.sh,.bat,.txt,.xls,.md,.log,.ps1" multiple>
+                <i class="fas fa-upload"></i> 选择文件（支持压缩包）
+                <input type="file" class="sr-only" @change="onFilesPicked" accept=".xlsx,.csv,.json,.zip,.py,.sh,.bat,.txt,.xls,.md,.log,.ps1" multiple>
+              </label>
+              <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
+                <i class="fas fa-folder-open"></i> 选择文件夹
+                <input type="file" class="sr-only" @change="onFilesPicked" webkitdirectory multiple>
               </label>
             </div>
-            <div class="mt-2 text-center">
-              <label class="text-sm text-gray-500 hover:text-indigo-600 cursor-pointer">
-                <i class="fas fa-folder-open"></i> 或选择文件夹上传
-                <input type="file" class="sr-only" @change="onFileUpload" webkitdirectory multiple>
-              </label>
+
+            <div v-if="pendingFiles.length" class="mt-3">
+              <p class="text-sm font-medium mb-2">已选择 {{ pendingFiles.length }} 个文件：</p>
+              <ul class="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
+                <li v-for="(f, i) in pendingFiles" :key="f.name + f.size + i" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded">
+                  {{ f.name }}
+                  <button type="button" @click="removePendingFile(i)" class="text-indigo-400 hover:text-red-500">&times;</button>
+                </li>
+              </ul>
+              <button @click="runTool" :disabled="running" class="mt-3 w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                <i class="fas fa-play"></i> {{ running ? '运行中...' : '运行' }}
+              </button>
             </div>
           </div>
 
@@ -188,6 +199,8 @@ const previewContent = ref(null)
 
 const uploadProgress = ref({ visible: false, percent: 0, text: '', success: true })
 const uploadResult = ref({ visible: false })
+const pendingFiles = ref([])
+const running = ref(false)
 
 const typeColor = computed(() => getToolTypeColors()[tool.value?.type] || 'bg-gray-100 text-gray-800')
 const keywords = computed(() => (tool.value?.keywords || '').split(',').filter(k => k.trim()).map(k => k.trim()))
@@ -259,11 +272,22 @@ async function submitWorkContent() {
   }
 }
 
-async function onFileUpload(event) {
-  if (!userStore.token) return showToast('请先登录', 'error')
-  const files = Array.from(event.target.files)
-  if (!files.length) return
+function onFilesPicked(event) {
+  const picked = Array.from(event.target.files || [])
+  event.target.value = ''
+  picked.forEach(f => {
+    if (!pendingFiles.value.some(g => g.name === f.name && g.size === f.size)) pendingFiles.value.push(f)
+  })
+}
 
+function removePendingFile(i) { pendingFiles.value.splice(i, 1) }
+
+async function runTool() {
+  if (!userStore.token) return showToast('请先登录', 'error')
+  const files = pendingFiles.value
+  if (!files.length) return showToast('请先选择文件', 'error')
+
+  running.value = true
   uploadProgress.value = { visible: true, percent: 20, text: `准备上传 ${files.length} 个文件...`, success: true }
   uploadResult.value = { visible: false }
   previewContent.value = null
@@ -272,21 +296,23 @@ async function onFileUpload(event) {
     const fd = new FormData()
     files.forEach(file => fd.append('file', file))
     uploadProgress.value.percent = 50
-    uploadProgress.value.text = '上传中...'
+    uploadProgress.value.text = '运行中...'
 
     const data = await request(`/api/tools/${toolId.value}/upload`, { method: 'POST', body: fd })
     uploadProgress.value.percent = 100
-    uploadProgress.value.text = '处理完成！'
+    uploadProgress.value.text = '运行完成！'
 
     currentResultFile.value = data.result_file
     uploadResult.value = { visible: true }
     pythonOutput.value = data.output || ''
-    showToast(data.message || '文件处理完成')
+    showToast(data.message || '运行完成')
+    pendingFiles.value = []
   } catch (e) {
-    uploadProgress.value = { visible: true, percent: 100, text: '处理失败: ' + e.message, success: false }
+    uploadProgress.value = { visible: true, percent: 100, text: '运行失败: ' + e.message, success: false }
     showToast(e.message, 'error')
+  } finally {
+    running.value = false
   }
-  event.target.value = ''
 }
 
 async function downloadTemplate(kind) {
