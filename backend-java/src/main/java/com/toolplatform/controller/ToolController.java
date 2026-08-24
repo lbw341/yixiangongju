@@ -102,8 +102,12 @@ public class ToolController extends BaseController {
             if (Files.exists(orig)) {
                 resource = new FileSystemResource(orig.toFile());
                 length = orig.toFile().length();
-                zipName = t.getTemplateFile();
+                zipName = (t.getTemplateFile() != null && !t.getTemplateFile().isEmpty())
+                        ? t.getTemplateFile() : t.getName();
             } else {
+                if (!Files.isDirectory(scriptPackageService.resolvePayload(id))) {
+                    return ResponseEntity.status(500).body(Map.of("error", "模板文件不存在"));
+                }
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 try {
                     scriptPackageService.zipPayloadTo(id, bos);

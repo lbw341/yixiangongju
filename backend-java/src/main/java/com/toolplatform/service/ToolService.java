@@ -310,20 +310,17 @@ public class ToolService {
         }
 
         boolean scriptExecuted = false;
-        if (tool != null && tool.getPackageDir() != null && !tool.getPackageDir().isEmpty()) {
+        if (tool != null && tool.getPackageDir() != null && !tool.getPackageDir().isEmpty()
+                && Files.exists(scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile()))) {
             Path scriptPath = scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile());
-            if (Files.exists(scriptPath)) {
-                try {
-                    Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
-                    String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
-                    resultContent = runScriptTemplate(py, scriptPath, allDataFiles);
-                    scriptExecuted = true;
-                } catch (Exception e) {
-                    resultContent = "脚本执行失败: " + e.getMessage();
-                    scriptExecuted = true;
-                }
-            } else if (allContent.length() > 0) {
-                resultContent = generateWeeklyReport(allContent.toString());
+            try {
+                Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
+                String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
+                resultContent = runScriptTemplate(py, scriptPath, allDataFiles);
+                scriptExecuted = true;
+            } catch (Exception e) {
+                resultContent = "脚本执行失败: " + e.getMessage();
+                scriptExecuted = true;
             }
         } else if (scriptFile != null && Files.exists(getTemplatePath(scriptFile))) {
             try {
@@ -333,6 +330,8 @@ public class ToolService {
                 resultContent = "脚本执行失败: " + e.getMessage();
                 scriptExecuted = true;
             }
+        } else if (allContent.length() > 0) {
+            resultContent = generateWeeklyReport(allContent.toString());
         }
 
         if (formatFile != null && Files.exists(getTemplatePath(formatFile))) {
