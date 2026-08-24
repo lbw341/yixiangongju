@@ -93,7 +93,7 @@ if (tool.getPackageDir() != null && !tool.getPackageDir().isEmpty()) {
 else if (templateFile.endsWith(".py")) { /* 现状不变 */ }
 ```
 
-`ScriptRunnerService.run(scriptPath, dataFiles)` 本身零改动。
+`ScriptRunnerService` 仅新增解释器覆盖重载 `run(String pythonCmd, Path, Map)`（null 时走既有缓存探测），用于注入 venv 解释器；其余零改动。
 
 ### 下载（`GET /api/tools/{id}/download_template`）
 

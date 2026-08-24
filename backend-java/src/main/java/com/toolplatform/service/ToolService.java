@@ -41,13 +41,15 @@ public class ToolService {
     private final DownloadStatRepository statRepo;
     private final UserToolUsageRepository usageRepo;
     private final ScriptRunnerService scriptRunner;
+    private final ScriptPackageService scriptPackageService;
 
     public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
-                       ScriptRunnerService scriptRunner) {
+                       ScriptRunnerService scriptRunner, ScriptPackageService scriptPackageService) {
         this.toolRepo = toolRepo;
         this.statRepo = statRepo;
         this.usageRepo = usageRepo;
         this.scriptRunner = scriptRunner;
+        this.scriptPackageService = scriptPackageService;
     }
 
     /**
@@ -308,16 +310,29 @@ public class ToolService {
         }
 
         boolean scriptExecuted = false;
-        if (scriptFile != null && Files.exists(getTemplatePath(scriptFile))) {
+        if (tool != null && tool.getPackageDir() != null && !tool.getPackageDir().isEmpty()) {
+            Path scriptPath = scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile());
+            if (Files.exists(scriptPath)) {
+                try {
+                    Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
+                    String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
+                    resultContent = runScriptTemplate(py, scriptPath, allDataFiles);
+                    scriptExecuted = true;
+                } catch (Exception e) {
+                    resultContent = "脚本执行失败: " + e.getMessage();
+                    scriptExecuted = true;
+                }
+            } else if (allContent.length() > 0) {
+                resultContent = generateWeeklyReport(allContent.toString());
+            }
+        } else if (scriptFile != null && Files.exists(getTemplatePath(scriptFile))) {
             try {
-                resultContent = runScriptTemplate(getTemplatePath(scriptFile), allDataFiles);
+                resultContent = runScriptTemplate(null, getTemplatePath(scriptFile), allDataFiles);
                 scriptExecuted = true;
             } catch (Exception e) {
                 resultContent = "脚本执行失败: " + e.getMessage();
                 scriptExecuted = true;
             }
-        } else if (allContent.length() > 0) {
-            resultContent = generateWeeklyReport(allContent.toString());
         }
 
         if (formatFile != null && Files.exists(getTemplatePath(formatFile))) {
@@ -349,9 +364,10 @@ public class ToolService {
     /**
      * 运行工具的脚本模板并组装用户可见的结果文本
      * 约定: sys.argv[1] 恒为数据目录，sys.argv[2:] 为数据文件列表（可为空）
+     * pythonCmd 为 null 时走 ScriptRunnerService 的自动探测
      */
-    private String runScriptTemplate(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        ScriptRunResult r = scriptRunner.run(scriptFile, dataFiles);
+    private String runScriptTemplate(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        ScriptRunResult r = scriptRunner.run(pythonCmd, scriptFile, dataFiles);
         if (!r.isPythonFound()) {
             return "错误: 服务端未安装Python或Python未添加到环境变量";
         }

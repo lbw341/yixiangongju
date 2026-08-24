@@ -33,10 +33,17 @@ public class ScriptRunnerService {
     private volatile String cachedPythonCmd;
 
     /**
-     * 运行脚本并捕获输出。数据文件写入临时目录后以绝对路径传给脚本。
+     * 运行脚本并捕获输出（解释器自动探测）。数据文件写入临时目录后以绝对路径传给脚本。
      * 无论成功失败，临时工作目录都会被清理。
      */
     public ScriptRunResult run(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        return run(null, scriptFile, dataFiles);
+    }
+
+    /**
+     * 显式指定解释器（pythonCmd 为 null 时自动探测缓存结果）
+     */
+    public ScriptRunResult run(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
         Path workDir = Files.createTempDirectory("tool_script_");
         try {
             Path dataDir = workDir.resolve("data");
@@ -50,13 +57,13 @@ public class ScriptRunnerService {
                 }
             }
 
-            String pythonCmd = findPythonCommand();
-            if (pythonCmd == null) {
+            String resolved = pythonCmd != null ? pythonCmd : findPythonCommand();
+            if (resolved == null) {
                 return ScriptRunResult.pythonMissing();
             }
 
             List<String> command = new ArrayList<>();
-            command.add(pythonCmd);
+            command.add(resolved);
             command.add("-u");
             command.add(scriptFile.toAbsolutePath().toString());
             command.add(dataDir.toAbsolutePath().toString());

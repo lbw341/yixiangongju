@@ -2,9 +2,11 @@ package com.toolplatform.controller;
 
 import com.toolplatform.entity.*;
 import com.toolplatform.repository.*;
+import com.toolplatform.service.ScriptPackageService;
 import com.toolplatform.service.ToolService;
 import com.toolplatform.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,14 +36,17 @@ public class ToolController extends BaseController {
     private final UserRepository userRepo;
     private final JwtUtil jwtUtil;
     private final ToolService toolService;
+    private final ScriptPackageService scriptPackageService;
 
     public ToolController(ToolRepository toolRepo, ReviewRepository reviewRepo,
-                          UserRepository userRepo, JwtUtil jwtUtil, ToolService toolService) {
+                          UserRepository userRepo, JwtUtil jwtUtil, ToolService toolService,
+                          ScriptPackageService scriptPackageService) {
         this.toolRepo = toolRepo;
         this.reviewRepo = reviewRepo;
         this.userRepo = userRepo;
         this.jwtUtil = jwtUtil;
         this.toolService = toolService;
+        this.scriptPackageService = scriptPackageService;
     }
 
     @Override
@@ -87,6 +93,41 @@ public class ToolController extends BaseController {
         var tool = toolRepo.findById(id);
         if (tool.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
         Tool t = tool.get();
+
+        if (t.getPackageDir() != null && !t.getPackageDir().isEmpty()) {
+            Path orig = scriptPackageService.resolveOriginalZip(id);
+            Resource resource;
+            long length;
+            String zipName;
+            if (Files.exists(orig)) {
+                resource = new FileSystemResource(orig.toFile());
+                length = orig.toFile().length();
+                zipName = t.getTemplateFile();
+            } else {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try {
+                    scriptPackageService.zipPayloadTo(id, bos);
+                } catch (IOException e) {
+                    return ResponseEntity.status(500).body(Map.of("error", "模板文件不存在"));
+                }
+                byte[] bytes = bos.toByteArray();
+                resource = new ByteArrayResource(bytes);
+                length = bytes.length;
+                String base = (t.getTemplateFile() != null && !t.getTemplateFile().isEmpty())
+                        ? t.getTemplateFile() : t.getName();
+                int dot = base.lastIndexOf('.');
+                zipName = (dot >= 0 ? base.substring(0, dot) : base) + ".zip";
+            }
+
+            toolService.updateDownloadStats(id, u.getId());
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + zipName + "\"")
+                    .contentLength(length)
+                    .body(resource);
+        }
+
         if (t.getTemplateFile() == null || t.getTemplateFile().isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("error", "该工具没有模板文件"));
         }
@@ -189,7 +230,8 @@ public class ToolController extends BaseController {
     public ResponseEntity<?> updateTool(@PathVariable Long id, HttpServletRequest request,
                                         @RequestParam Map<String, String> form,
                                         @RequestParam(value = "file", required = false) MultipartFile file,
-                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile) {
+                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile,
+                                        @RequestParam(value = "files", required = false) MultipartFile[] files) {
         User u = getCurrentUser(request);
         if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
 
@@ -225,6 +267,21 @@ public class ToolController extends BaseController {
 
         if (clearTemplate) {
             tool.setTemplateFile("");
+            scriptPackageService.deleteArtifacts(id);
+            tool.setPackageDir("");
+            tool.setEntryFile("");
+        } else if (files != null && files.length > 0) {
+            try {
+                ScriptPackageService.PackageInstallResult pkg =
+                        scriptPackageService.install(tool.getId(), Arrays.asList(files));
+                tool.setPackageDir(pkg.getPackageDir());
+                tool.setEntryFile(pkg.getEntryFile());
+                tool.setTemplateFile(pkg.getDisplayName());
+            } catch (IOException | InterruptedException e) {
+                return ResponseEntity.status(400).body(Map.of(
+                        "error", firstLine(e.getMessage()),
+                        "install_log", e.getMessage() == null ? "" : e.getMessage()));
+            }
         } else if (file != null && !file.isEmpty()) {
             try {
                 tool.setTemplateFile(toolService.saveTemplateFile(file));
@@ -297,7 +354,8 @@ public class ToolController extends BaseController {
     public ResponseEntity<?> uploadTool(HttpServletRequest request,
                                         @RequestParam Map<String, String> form,
                                         @RequestParam(value = "file", required = false) MultipartFile file,
-                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile) {
+                                        @RequestParam(value = "format_file", required = false) MultipartFile formatFile,
+                                        @RequestParam(value = "files", required = false) MultipartFile[] files) {
         User u = getCurrentUser(request);
         if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
 
@@ -322,26 +380,50 @@ public class ToolController extends BaseController {
         tool.setInstructions(form.getOrDefault("instructions", ""));
         tool.setStatus("online");
 
-        if (file != null && !file.isEmpty()) {
+        if (files != null && files.length > 0) {
+            toolRepo.save(tool);
             try {
-                String uniqueName = toolService.saveTemplateFile(file);
-                tool.setTemplateFile(uniqueName);
-            } catch (IOException e) {
-                return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
+                ScriptPackageService.PackageInstallResult pkg =
+                        scriptPackageService.install(tool.getId(), Arrays.asList(files));
+                tool.setPackageDir(pkg.getPackageDir());
+                tool.setEntryFile(pkg.getEntryFile());
+                tool.setTemplateFile(pkg.getDisplayName());
+                toolRepo.save(tool);
+            } catch (IOException | InterruptedException e) {
+                toolRepo.delete(tool);
+                return ResponseEntity.status(400).body(Map.of(
+                        "error", firstLine(e.getMessage()),
+                        "install_log", e.getMessage() == null ? "" : e.getMessage()));
             }
+        } else {
+            if (file != null && !file.isEmpty()) {
+                try {
+                    String uniqueName = toolService.saveTemplateFile(file);
+                    tool.setTemplateFile(uniqueName);
+                } catch (IOException e) {
+                    return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
+                }
+            }
+
+            if (formatFile != null && !formatFile.isEmpty()) {
+                try {
+                    String uniqueName = toolService.saveTemplateFile(formatFile);
+                    tool.setFormatTemplate(uniqueName);
+                } catch (IOException e) {
+                    return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
+                }
+            }
+
+            toolRepo.save(tool);
         }
 
-        if (formatFile != null && !formatFile.isEmpty()) {
-            try {
-                String uniqueName = toolService.saveTemplateFile(formatFile);
-                tool.setFormatTemplate(uniqueName);
-            } catch (IOException e) {
-                return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
-            }
-        }
-
-        toolRepo.save(tool);
         return ResponseEntity.status(201).body(Map.of("message", "工具创建成功", "tool_id", tool.getId()));
+    }
+
+    private String firstLine(String s) {
+        if (s == null) return "";
+        int i = s.indexOf('\n');
+        return i >= 0 ? s.substring(0, i) : s;
     }
 
     @PutMapping("/{id}/toggle_status")
@@ -376,6 +458,7 @@ public class ToolController extends BaseController {
             return ResponseEntity.status(403).body(Map.of("error", "无权删除此工具"));
         }
 
+        scriptPackageService.deleteArtifacts(id);
         toolRepo.delete(tool);
         return ResponseEntity.ok(Map.of("message", "删除成功"));
     }
