@@ -399,27 +399,25 @@ public class ToolController extends BaseController {
                         "error", firstLine(e.getMessage()),
                         "install_log", e.getMessage() == null ? "" : e.getMessage()));
             }
-        } else {
-            if (file != null && !file.isEmpty()) {
-                try {
-                    String uniqueName = toolService.saveTemplateFile(file);
-                    tool.setTemplateFile(uniqueName);
-                } catch (IOException e) {
-                    return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
-                }
+        } else if (file != null && !file.isEmpty()) {
+            try {
+                String uniqueName = toolService.saveTemplateFile(file);
+                tool.setTemplateFile(uniqueName);
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "模板上传失败"));
             }
-
-            if (formatFile != null && !formatFile.isEmpty()) {
-                try {
-                    String uniqueName = toolService.saveTemplateFile(formatFile);
-                    tool.setFormatTemplate(uniqueName);
-                } catch (IOException e) {
-                    return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
-                }
-            }
-
-            toolRepo.save(tool);
         }
+
+        if (formatFile != null && !formatFile.isEmpty()) {
+            try {
+                String uniqueName = toolService.saveTemplateFile(formatFile);
+                tool.setFormatTemplate(uniqueName);
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body(Map.of("error", "格式模板上传失败"));
+            }
+        }
+
+        toolRepo.save(tool);
 
         return ResponseEntity.status(201).body(Map.of("message", "工具创建成功", "tool_id", tool.getId()));
     }

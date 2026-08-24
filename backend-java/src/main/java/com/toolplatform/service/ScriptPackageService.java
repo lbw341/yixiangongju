@@ -188,6 +188,7 @@ public class ScriptPackageService {
     private void doExtract(Path zipFile, Path payload, Charset cs) throws IOException {
         int count = 0;
         long total = 0;
+        byte[] buf = new byte[8192];
         try (ZipFile zf = new ZipFile(zipFile.toFile(), cs)) {
             Enumeration<? extends ZipEntry> en = zf.entries();
             while (en.hasMoreElements()) {
@@ -197,11 +198,14 @@ public class ScriptPackageService {
                 if (count > MAX_PACKAGE_ENTRIES) throw new PackageInstallException("包内文件数超过上限 (" + MAX_PACKAGE_ENTRIES + ")");
                 Path target = safeResolve(payload, e.getName());
                 checkBlocked(target.getFileName().toString());
-                total += Math.max(e.getSize(), 0);
-                if (total > MAX_PACKAGE_BYTES) throw new PackageInstallException("解压后总大小超过上限 (200MB)");
                 Files.createDirectories(target.getParent());
-                try (InputStream is = zf.getInputStream(e)) {
-                    Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
+                try (InputStream is = zf.getInputStream(e); OutputStream os = Files.newOutputStream(target)) {
+                    int n;
+                    while ((n = is.read(buf)) != -1) {
+                        total += n;
+                        if (total > MAX_PACKAGE_BYTES) throw new PackageInstallException("解压后总大小超过上限 (200MB)");
+                        os.write(buf, 0, n);
+                    }
                 }
             }
         }
