@@ -96,11 +96,18 @@
             <textarea v-model="editForm.faq" rows="2" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
           </div>
           <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板 (.py)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板（多选或单个 zip 包）</label>
             <div class="flex items-center gap-2">
-              <input type="file" accept=".py" @change="e => editScriptFile = e.target.files[0] || null" class="w-full border border-gray-300 rounded-lg p-2">
+              <input type="file" accept=".py,.txt,.zip" multiple @change="onEditScriptChange" class="w-full border border-gray-300 rounded-lg p-2">
               <span v-if="editing.templateFile" class="text-xs text-gray-500 whitespace-nowrap">{{ editing.templateFile }}</span>
             </div>
+            <ul v-if="editScriptFiles.length" class="mt-2 flex flex-wrap gap-2">
+              <li v-for="(f, i) in editScriptFiles" :key="f.name + i" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded">
+                {{ f.name }}
+                <button type="button" @click="removeEditScriptFile(i)" class="text-indigo-400 hover:text-red-500">&times;</button>
+              </li>
+            </ul>
+            <p class="text-xs text-gray-400 mt-1">重新上传将整包替换</p>
             <label class="flex items-center gap-2 text-sm text-gray-500 mt-1 cursor-pointer">
               <input type="checkbox" v-model="clearScript"> 清除脚本模板
             </label>
@@ -140,13 +147,34 @@ const myTools = ref([])
 const editing = ref(null)
 const saving = ref(false)
 const editForm = reactive({})
-const editScriptFile = ref(null)
+const BLOCKED_EXT = ['exe', 'dll', 'bat', 'cmd', 'ps1', 'msi', 'scr', 'com', 'jar']
+const editScriptFiles = ref([])
 const editFormatFile = ref(null)
 const clearScript = ref(false)
 const clearFormat = ref(false)
 
 function toolStatusColor(status) {
   return status === 'online' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+}
+
+function onEditScriptChange(e) {
+  const picked = Array.from(e.target.files || [])
+  e.target.value = ''
+  if (!picked.length) return
+  const zips = picked.filter(f => f.name.toLowerCase().endsWith('.zip'))
+  if (zips.length > 1 || (zips.length === 1 && picked.length > 1)) {
+    return showToast('zip 包必须单独上传，不能与其他文件同时选择', 'error')
+  }
+  const dup = picked.find((f, i) => picked.findIndex(g => g.name.toLowerCase() === f.name.toLowerCase()) !== i)
+    || editScriptFiles.value.find(f => picked.some(g => g.name.toLowerCase() === f.name.toLowerCase()))
+  if (dup) return showToast('存在重名文件: ' + dup.name, 'error')
+  const bad = picked.find(f => BLOCKED_EXT.some(ext => f.name.toLowerCase().endsWith('.' + ext)))
+  if (bad) return showToast('不允许的可执行文件: ' + bad.name, 'error')
+  editScriptFiles.value.push(...picked)
+}
+
+function removeEditScriptFile(i) {
+  editScriptFiles.value.splice(i, 1)
 }
 
 function openEdit(tool) {
@@ -162,7 +190,7 @@ function openEdit(tool) {
     instructions: tool.instructions || '',
     faq: tool.faq || ''
   })
-  editScriptFile.value = null
+  editScriptFiles.value = []
   editFormatFile.value = null
   clearScript.value = false
   clearFormat.value = false
@@ -174,7 +202,7 @@ async function saveEdit() {
   try {
     const fd = new FormData()
     Object.entries(editForm).forEach(([k, v]) => fd.append(k, v ?? ''))
-    if (editScriptFile.value) fd.append('file', editScriptFile.value)
+    editScriptFiles.value.forEach(f => fd.append('files', f))
     if (editFormatFile.value) fd.append('format_file', editFormatFile.value)
     if (clearScript.value) fd.append('clear_template', '1')
     if (clearFormat.value) fd.append('clear_format', '1')
