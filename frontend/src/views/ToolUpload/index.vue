@@ -32,7 +32,7 @@
             <option value="客服">客服</option>
           </select>
         </div>
-        <div>
+        <div v-if="form.type === 'python'">
           <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板（多选或单个 zip 包）</label>
           <input type="file" accept=".py,.txt,.zip" multiple @change="onScriptChange" class="w-full border border-gray-300 rounded-lg p-3">
           <ul v-if="scriptFiles.length" class="mt-2 flex flex-wrap gap-2">
@@ -42,6 +42,16 @@
             </li>
           </ul>
           <p class="text-xs text-gray-400 mt-1">可选：多个 .py/.txt 文件或单个 .zip（支持文件夹结构）。含 requirements.txt 时创建工具会自动安装依赖。约定：sys.argv[1] 为数据目录，sys.argv[2:] 为文件路径列表，结果打印到 stdout</p>
+        </div>
+        <div v-else>
+          <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板</label>
+          <div class="flex items-center gap-2">
+            <input type="file" :accept="SCRIPT_ACCEPT[form.type] || ''" @change="onSingleScriptChange" class="w-full border border-gray-300 rounded-lg p-3">
+            <span v-if="singleScript" class="text-xs text-gray-500 whitespace-nowrap">{{ singleScript.name }}
+              <button type="button" @click="singleScript = null" class="text-gray-400 hover:text-red-500">&times;</button>
+            </span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">可选：作为模板附件保存与下载（服务端脚本执行仅支持 Python 类型）</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">文档格式模板</label>
@@ -67,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { request } from '../../api/request'
 import { useToast } from '../../composables/useToast'
@@ -79,9 +89,21 @@ const form = reactive({
   name: '', type: 'python', category: '规划', description: '', instructions: ''
 })
 const BLOCKED_EXT = ['exe', 'dll', 'bat', 'cmd', 'ps1', 'msi', 'scr', 'com', 'jar']
+const SCRIPT_ACCEPT = {
+  python: '.py,.txt,.zip',
+  excel: '.xlsx,.xls,.csv',
+  bash: '.sh,.txt',
+  bat: '.bat,.cmd'
+}
 const scriptFiles = ref([])
+const singleScript = ref(null)
 const formatFile = ref(null)
 const uploading = ref(false)
+
+watch(() => form.type, () => {
+  scriptFiles.value = []
+  singleScript.value = null
+})
 
 function onScriptChange(e) {
   const picked = Array.from(e.target.files || [])
@@ -103,16 +125,26 @@ function removeScriptFile(i) {
   scriptFiles.value.splice(i, 1)
 }
 
+function onSingleScriptChange(e) {
+  singleScript.value = e.target.files[0] || null
+  e.target.value = ''
+}
+
 function onFormatChange(e) {
   formatFile.value = e.target.files[0] || null
 }
 
 async function handleUpload() {
-  if (!scriptFiles.value.length && !formatFile.value) return showToast('请至少上传一个模板文件', 'error')
+  const hasScript = form.type === 'python' ? scriptFiles.value.length > 0 : !!singleScript.value
+  if (!hasScript && !formatFile.value) return showToast('请至少上传一个模板文件', 'error')
   uploading.value = true
   try {
     const fd = new FormData()
-    scriptFiles.value.forEach(f => fd.append('files', f))
+    if (form.type === 'python') {
+      scriptFiles.value.forEach(f => fd.append('files', f))
+    } else if (singleScript.value) {
+      fd.append('file', singleScript.value)
+    }
     if (formatFile.value) fd.append('format_file', formatFile.value)
     fd.append('name', form.name)
     fd.append('type', form.type)

@@ -95,7 +95,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">常见问题</label>
             <textarea v-model="editForm.faq" rows="2" class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
           </div>
-          <div class="md:col-span-2">
+          <div v-if="(editForm.type || '') === 'python'" class="md:col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板（多选或单个 zip 包）</label>
             <div class="flex items-center gap-2">
               <input type="file" accept=".py,.txt,.zip" multiple @change="onEditScriptChange" class="w-full border border-gray-300 rounded-lg p-2">
@@ -108,6 +108,20 @@
               </li>
             </ul>
             <p class="text-xs text-gray-400 mt-1">重新上传将整包替换</p>
+            <label class="flex items-center gap-2 text-sm text-gray-500 mt-1 cursor-pointer">
+              <input type="checkbox" v-model="clearScript"> 清除脚本模板
+            </label>
+          </div>
+          <div v-else class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">脚本模板</label>
+            <div class="flex items-center gap-2">
+              <input type="file" :accept="SCRIPT_ACCEPT[editForm.type] || ''" @change="onEditSingleScriptChange" class="w-full border border-gray-300 rounded-lg p-2">
+              <span v-if="editing.templateFile && !editSingleScript" class="text-xs text-gray-500 whitespace-nowrap">{{ editing.templateFile }}</span>
+              <span v-if="editSingleScript" class="text-xs text-gray-500 whitespace-nowrap">{{ editSingleScript.name }}
+                <button type="button" @click="editSingleScript = null" class="text-gray-400 hover:text-red-500">&times;</button>
+              </span>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">可选：作为模板附件保存与下载（服务端脚本执行仅支持 Python 类型）</p>
             <label class="flex items-center gap-2 text-sm text-gray-500 mt-1 cursor-pointer">
               <input type="checkbox" v-model="clearScript"> 清除脚本模板
             </label>
@@ -135,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { request } from '../../api/request'
 import { useToast } from '../../composables/useToast'
@@ -148,10 +162,22 @@ const editing = ref(null)
 const saving = ref(false)
 const editForm = reactive({})
 const BLOCKED_EXT = ['exe', 'dll', 'bat', 'cmd', 'ps1', 'msi', 'scr', 'com', 'jar']
+const SCRIPT_ACCEPT = {
+  python: '.py,.txt,.zip',
+  excel: '.xlsx,.xls,.csv',
+  bash: '.sh,.txt',
+  bat: '.bat,.cmd'
+}
 const editScriptFiles = ref([])
+const editSingleScript = ref(null)
 const editFormatFile = ref(null)
 const clearScript = ref(false)
 const clearFormat = ref(false)
+
+watch(() => editForm.type, () => {
+  editScriptFiles.value = []
+  editSingleScript.value = null
+})
 
 function toolStatusColor(status) {
   return status === 'online' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
@@ -177,6 +203,11 @@ function removeEditScriptFile(i) {
   editScriptFiles.value.splice(i, 1)
 }
 
+function onEditSingleScriptChange(e) {
+  editSingleScript.value = e.target.files[0] || null
+  e.target.value = ''
+}
+
 function openEdit(tool) {
   Object.assign(editForm, {
     name: tool.name || '',
@@ -191,6 +222,7 @@ function openEdit(tool) {
     faq: tool.faq || ''
   })
   editScriptFiles.value = []
+  editSingleScript.value = null
   editFormatFile.value = null
   clearScript.value = false
   clearFormat.value = false
@@ -202,7 +234,11 @@ async function saveEdit() {
   try {
     const fd = new FormData()
     Object.entries(editForm).forEach(([k, v]) => fd.append(k, v ?? ''))
-    editScriptFiles.value.forEach(f => fd.append('files', f))
+    if ((editForm.type || '') === 'python') {
+      editScriptFiles.value.forEach(f => fd.append('files', f))
+    } else if (editSingleScript.value) {
+      fd.append('file', editSingleScript.value)
+    }
     if (editFormatFile.value) fd.append('format_file', editFormatFile.value)
     if (clearScript.value) fd.append('clear_template', '1')
     if (clearFormat.value) fd.append('clear_format', '1')
