@@ -9,6 +9,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -346,12 +350,21 @@ public class ToolController extends BaseController {
     }
 
     @GetMapping("/my")
-    public ResponseEntity<?> myTools(HttpServletRequest request) {
+    public ResponseEntity<?> myTools(HttpServletRequest request,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(value = "keyword", required = false) String keyword) {
         User u = getCurrentUser(request);
         if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
-        List<Tool> tools = toolRepo.findByAuthorId(u.getId());
-        tools.sort((a, b) -> Long.compare(b.getId(), a.getId()));
-        return ResponseEntity.ok(Map.of("tools", tools));
+        String kw = keyword == null ? "" : keyword.trim();
+        Pageable pageable = PageRequest.of(Math.max(page - 1, 0), Math.min(Math.max(size, 1), 50),
+                Sort.by(Sort.Direction.DESC, "id"));
+        Page<Tool> result = toolRepo.searchMy(u.getId(), kw, pageable);
+        return ResponseEntity.ok(Map.of(
+                "tools", result.getContent(),
+                "total", result.getTotalElements(),
+                "page", result.getNumber() + 1,
+                "size", result.getSize()));
     }
 
     @PostMapping("")

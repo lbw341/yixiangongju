@@ -6,21 +6,26 @@
     <div class="bg-white rounded-lg shadow-md p-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold">我的工具</h2>
-        <button @click="router.push('/tools/upload')" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
-          <i class="fas fa-upload"></i> 上传工具
-        </button>
+        <div class="flex items-center gap-2">
+          <input v-model="keyword" @keyup.enter="search" placeholder="搜索名称或描述"
+                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 w-56">
+          <button @click="search" class="px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition">搜索</button>
+          <button @click="router.push('/tools/upload')" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+            <i class="fas fa-upload"></i> 上传工具
+          </button>
+        </div>
       </div>
       <div v-if="myTools.length > 0" class="space-y-4">
-        <div v-for="tool in myTools" :key="tool.id" class="border rounded-lg p-4 flex justify-between items-center">
-          <div>
-            <h3 class="font-bold">{{ tool.name }}</h3>
-            <p class="text-sm text-gray-500">{{ tool.description }}</p>
+        <div v-for="tool in myTools" :key="tool.id" class="border rounded-lg p-4 flex justify-between items-center gap-4">
+          <div class="min-w-0 flex-1">
+            <h3 class="font-bold truncate">{{ tool.name }}</h3>
+            <p class="text-sm text-gray-500 line-clamp-2 mt-0.5">{{ tool.description }}</p>
             <div class="flex items-center gap-2 mt-2">
               <span :class="['text-xs px-2 py-1 rounded', toolStatusColor(tool.status)]">{{ tool.status === 'online' ? '在线' : '离线' }}</span>
               <span class="text-xs text-gray-400">下载: {{ tool.downloads }}</span>
             </div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 shrink-0">
             <button @click="openEdit(tool)" class="px-3 py-1 text-sm rounded border border-indigo-300 text-indigo-500 hover:bg-indigo-50 transition">
               编辑
             </button>
@@ -34,6 +39,14 @@
         </div>
       </div>
       <p v-else class="text-gray-400">暂无上传的工具</p>
+      <div class="flex items-center justify-between mt-4 pt-4 border-t text-sm text-gray-600">
+        <span>共 {{ total }} 条</span>
+        <div class="flex items-center gap-2">
+          <button :disabled="pageNum <= 1" @click="pageNum--; loadMyTools()" class="px-3 py-1 rounded border disabled:opacity-40 hover:bg-gray-50 transition">上一页</button>
+          <span>第 {{ pageNum }} / {{ totalPages }} 页</span>
+          <button :disabled="pageNum >= totalPages" @click="pageNum++; loadMyTools()" class="px-3 py-1 rounded border disabled:opacity-40 hover:bg-gray-50 transition">下一页</button>
+        </div>
+      </div>
     </div>
 
     <!-- 编辑工具弹窗 -->
@@ -149,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { request } from '../../api/request'
 import { useToast } from '../../composables/useToast'
@@ -158,6 +171,11 @@ const router = useRouter()
 const { showToast } = useToast()
 
 const myTools = ref([])
+const keyword = ref('')
+const pageNum = ref(1)
+const pageSize = 10
+const total = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const editing = ref(null)
 const saving = ref(false)
 const editForm = reactive({})
@@ -255,9 +273,21 @@ async function saveEdit() {
 
 async function loadMyTools() {
   try {
-    const data = await request('/api/tools/my')
+    const params = new URLSearchParams({ page: pageNum.value, size: pageSize })
+    if (keyword.value.trim()) params.append('keyword', keyword.value.trim())
+    const data = await request('/api/tools/my?' + params.toString())
     myTools.value = data.tools || []
+    total.value = data.total || 0
+    if (!myTools.value.length && pageNum.value > 1) {
+      pageNum.value--
+      return loadMyTools()
+    }
   } catch (e) {}
+}
+
+function search() {
+  pageNum.value = 1
+  loadMyTools()
 }
 
 async function toggleStatus(tool) {
