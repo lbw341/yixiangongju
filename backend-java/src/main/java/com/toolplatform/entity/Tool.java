@@ -20,6 +20,15 @@ public class Tool {
     private Long authorId;
     private String authorName = "";
     private String templateFile = "";
+
+    /** 脚本包目录名（uploads/script_packages/ 下），非空表示脚本包模式 */
+    @Column(name = "package_dir")
+    private String packageDir = "";
+
+    /** 入口脚本在 payload 内的相对路径 */
+    @Column(name = "entry_file")
+    private String entryFile = "";
+
     private String formatTemplate = "";
     private String status = "online";
     private int downloads = 0;
@@ -51,6 +60,10 @@ public class Tool {
     public void setAuthorName(String authorName) { this.authorName = authorName; }
     public String getTemplateFile() { return templateFile; }
     public void setTemplateFile(String templateFile) { this.templateFile = templateFile; }
+    public String getPackageDir() { return packageDir; }
+    public void setPackageDir(String packageDir) { this.packageDir = packageDir; }
+    public String getEntryFile() { return entryFile; }
+    public void setEntryFile(String entryFile) { this.entryFile = entryFile; }
     public String getFormatTemplate() { return formatTemplate; }
     public void setFormatTemplate(String formatTemplate) { this.formatTemplate = formatTemplate; }
     public String getStatus() { return status; }

@@ -103,8 +103,9 @@ public class ScriptRunnerService {
 
     /**
      * Python 解释器探测，进程内只探测一次（含否定结果缓存）
+     * 供脚本包依赖安装复用
      */
-    private String findPythonCommand() {
+    public String findPythonCommand() {
         if (pythonLookupDone) {
             return cachedPythonCmd;
         }
