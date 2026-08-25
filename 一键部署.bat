@@ -1,6 +1,6 @@
 @echo off
-chcp 936 >nul
-title 一线工具平台 - 一键环境部署
+chcp 65001 >nul
+title Tool Platform - One-Click Deploy
 
 set "ROOT=%~dp0"
 set "RUNTIME=%ROOT%runtime"
@@ -13,26 +13,26 @@ if not exist "%RUNTIME%" mkdir "%RUNTIME%"
 if not exist "%CACHE%"   mkdir "%CACHE%"
 
 echo ============================================
-echo   一线工具平台 - 一键环境部署
-echo   (首次运行需联网,后续离线可启动)
+echo   Tool Platform - One-Click Deploy
+echo   (First run will download dependencies)
 echo ============================================
 echo.
 
 :: ===================== JDK 21 =====================
-echo [1/4] 检查 JDK 21...
+echo [1/4] Checking JDK 21...
 if exist "%JAVA%" (
-    "%JAVA%" -version 2>nul | findstr /C:"21" >nul && (echo   已就绪: JDK 21 & goto :MAVEN)
+    "%JAVA%" -version 2>nul | findstr /C:"21" >nul && (echo   Already installed: JDK 21 & goto :MAVEN)
 )
-echo   正在下载 JDK 21 (约 196MB,请耐心等待)...
+echo   Downloading JDK 21 (~196MB, please wait)...
 set "JDK_URL=https://mirrors.tuna.tsinghua.edu.cn/Adoptium/21/jdk/x64/windows/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip"
 set "JDK_ZIP=%CACHE%\jdk21.zip"
 powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%JDK_URL%','%JDK_ZIP%')"
 if not exist "%JDK_ZIP%" (
-    echo   [失败] JDK 下载失败,请检查网络后重试。
-    echo   手动安装 JDK 21 后可跳过此步骤。
+    echo   [FAIL] JDK download failed, please check network.
+    echo   Please install JDK 21 manually and run start.bat
     goto :MAVEN
 )
-echo   正在解压...
+echo   Extracting...
 powershell -NoProfile -Command "Expand-Archive -Path '%JDK_ZIP%' -DestinationPath '%RUNTIME%\jdk21_tmp' -Force"
 for /d %%D in ("%RUNTIME%\jdk21_tmp\jdk-*") do rename "%%D" jdk-21 2>nul
 if not exist "%RUNTIME%\jdk-21\bin\java.exe" (
@@ -42,82 +42,82 @@ if not exist "%RUNTIME%\jdk-21\bin\java.exe" (
 )
 rd /s /q "%RUNTIME%\jdk21_tmp" 2>nul
 del "%JDK_ZIP%" 2>nul
-if exist "%JAVA%" (echo   JDK 21 安装完成) else echo   [警告] JDK 解压异常
+if exist "%JAVA%" (echo   JDK 21 installed) else echo   [WARN] JDK extraction error
 
 :MAVEN
-echo [2/4] 检查 Maven...
-if exist "%MVN%" (echo   已就绪: Maven & goto :PYTHON)
-echo   正在下载 Maven 3.9.16 (约 9MB)...
+echo [2/4] Checking Maven...
+if exist "%MVN%" (echo   Already installed: Maven & goto :PYTHON)
+echo   Downloading Maven 3.9.16 (~9MB)...
 set "MVN_URL=https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip"
 set "MVN_ZIP=%CACHE%\maven.zip"
 powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%MVN_URL%','%MVN_ZIP%')"
-if not exist "%MVN_ZIP%" (echo   [失败] Maven 下载失败 & goto :PYTHON)
-echo   正在解压...
+if not exist "%MVN_ZIP%" (echo   [FAIL] Maven download failed & goto :PYTHON)
+echo   Extracting...
 powershell -NoProfile -Command "Expand-Archive -Path '%MVN_ZIP%' -DestinationPath '%RUNTIME%\maven_tmp' -Force"
 for /d %%D in ("%RUNTIME%\maven_tmp\apache-maven-*") do move "%%D" "%RUNTIME%\maven" >nul
 rd /s /q "%RUNTIME%\maven_tmp" 2>nul
 del "%MVN_ZIP%" 2>nul
-if exist "%MVN%" (echo   Maven 安装完成) else echo   [警告] Maven 解压异常
+if exist "%MVN%" (echo   Maven installed) else echo   [WARN] Maven extraction error
 
 :PYTHON
-echo [3/4] 检查 Python 3.x...
+echo [3/4] Checking Python 3.x...
 set "HAS_PY=0"
 if exist "%PY%" set "HAS_PY=1"
 if "%HAS_PY%"=="0" python --version >nul 2>nul && set "HAS_PY=1" && set "PY=python"
 if "%HAS_PY%"=="0" py --version >nul 2>nul && set "HAS_PY=1" && set "PY=py"
 if "%HAS_PY%"=="1" (
-    %PY% --version 2>nul | findstr /C:"Python 3" >nul && (echo   已就绪: !PY! & goto :MYSQL)
+    %PY% --version 2>nul | findstr /C:"Python 3" >nul && (echo   Already installed: Python & goto :MYSQL)
 )
-echo   正在下载 Python 3.13 (约 28MB,静默安装中)...
+echo   Downloading Python 3.13 (~28MB, default install)...
 set "PY_URL=https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.exe"
 set "PY_EXE=%CACHE%\python-setup.exe"
 powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PY_URL%','%PY_EXE%')"
-if not exist "%PY_EXE%" (echo   [失败] Python 下载失败 & goto :MYSQL)
+if not exist "%PY_EXE%" (echo   [FAIL] Python download failed & goto :MYSQL)
 "%PY_EXE%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_test=0
 timeout /t 15 >nul
-echo   Python 安装完成
+echo   Python installed
 
 :MYSQL
-echo [4/4] 检查 MySQL...
+echo [4/4] Checking MySQL...
 sc query MySQL >nul 2>nul && goto :MYSQL_RUNNING
 sc query MySQL57 >nul 2>nul && goto :MYSQL_RUNNING
 sc query MySQL80 >nul 2>nul && goto :MYSQL_RUNNING
-echo   [提示] 未检测到 MySQL 服务。
-echo   请先安装 MySQL (推荐 5.7 或 8.0) 并确保服务已启动。
-echo   安装地址: https://dev.mysql.com/downloads/mysql/
+echo   [INFO] MySQL service not detected.
+echo   Please install MySQL (5.7 or 8.0) and ensure it is running.
+echo   Download: https://dev.mysql.com/downloads/mysql/
 echo.
-set /p WAITMYSQL=安装好 MySQL 后按回车继续...
+set /p WAITMYSQL=Press Enter after installing MySQL...
 goto :MYSQL
 
 :MYSQL_RUNNING
-echo   MySQL 服务已启动
+echo   MySQL service is running.
 echo.
 
-:: ---- 数据库初始化 ----
-echo 请输入 MySQL root 密码 (若已初始化过可直接回车):
+:: ---- Database Init ----
+echo Enter MySQL root password (press Enter to skip if already initialized):
 set /p ROOTPWD=^>
 if "%ROOTPWD%"=="" goto :LAUNCH
-echo 正在初始化账号...
+echo Initializing database account...
 where mysql >nul 2>nul
 if errorlevel 1 (
-    set /p MYSQLBIN=请输入 mysql.exe 所在目录: 
+    set /p MYSQLBIN=Enter mysql.exe directory: 
     set "PATH=%MYSQLBIN%;%PATH%"
 )
 mysql -u root -p%ROOTPWD% --default-character-set=utf8mb4 < "%ROOT%database\init_user.sql"
 if errorlevel 1 (
-    echo [警告] 数据库账号初始化失败 (可能已存在),继续尝试启动...
+    echo [WARN] Database init failed (account may already exist), continuing...
 ) else (
-    echo 数据库账号初始化完成
+    echo Database account initialized successfully.
 )
 
 :LAUNCH
 set "PATH=%RUNTIME%\jdk-21\bin;%RUNTIME%\maven\bin;%PATH%"
 cd /d "%ROOT%backend-java"
 echo ============================================
-echo   正在启动平台...
-echo   首次启动将自动建库建表 (约30秒)
-echo   看到 Started 后访问: http://localhost:5000
-echo   管理员账号: admin / 123456
+echo   Starting Tool Platform...
+echo   First run will auto-download deps (~30s)
+echo   After "Started" visit: http://localhost:5000
+echo   Admin account: admin / 123456
 echo ============================================
 echo.
 call mvn spring-boot:run
