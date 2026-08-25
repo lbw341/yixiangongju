@@ -1,27 +1,27 @@
 @echo off
-setlocal enabledelayedexpansion
-chcp 65001 >nul
+chcp 936 >nul
 echo ============================================
-echo   ä¸€çº¿å·¥å…·å¹³å° - æ•°æ®åº“ä¸€é”®åˆå§‹åŒ–
+echo   Ò»Ïß¹¤¾ßÆ½Ì¨ - Êı¾İ¿âÒ»¼ü³õÊ¼»¯
 echo ============================================
-echo æœ¬è„šæœ¬å°†åˆ›å»ºæ•°æ®åº“è´¦å· tooluser / tooldb123
-echo å¹¶æˆæƒè®¿é—® tooldb åº“ï¼ˆåº”ç”¨å¯åŠ¨æ—¶ä¼šè‡ªåŠ¨å»ºåº“å»ºè¡¨ï¼‰
+echo ±¾½Å±¾½«´´½¨Êı¾İ¿âÕËºÅ tooluser / tooldb123
+echo ²¢ÊÚÈ¨·ÃÎÊ tooldb ¿â (Ó¦ÓÃÆô¶¯Ê±»á×Ô¶¯½¨¿â½¨±í)
 echo.
+set /p ROOTPWD=ÇëÊäÈë MySQL root ÃÜÂë: 
+
 where mysql >nul 2>nul
 if errorlevel 1 (
-    echo æœªåœ¨ PATH ä¸­æ‰¾åˆ° mysql å‘½ä»¤ã€‚
-    set /p MYSQLBIN=è¯·è¾“å…¥ mysql.exe æ‰€åœ¨ç›®å½•ï¼ˆä¾‹å¦‚ C:\Program Files\MySQL\MySQL Server 5.7\binï¼‰: 
-    set "PATH=!MYSQLBIN!;%PATH%"
+    echo Î´ÔÚ PATH ÖĞÕÒµ½ mysql ÃüÁî¡£
+    set /p MYSQLBIN=ÇëÊäÈë mysql.exe ËùÔÚÄ¿Â¼: 
+    set "PATH=%MYSQLBIN%;%PATH%"
 )
-set /p ROOTPWD=è¯·è¾“å…¥ MySQL root å¯†ç : 
 echo.
-echo æ­£åœ¨åˆå§‹åŒ–è´¦å·...
+echo ÕıÔÚ³õÊ¼»¯ÕËºÅ...
 mysql -u root -p%ROOTPWD% --default-character-set=utf8mb4 < "%~dp0database\init_user.sql"
 if errorlevel 1 (
-    echo åˆå§‹åŒ–å¤±è´¥ï¼šè¯·æ£€æŸ¥ root å¯†ç æ˜¯å¦æ­£ç¡®ã€MySQL æœåŠ¡æ˜¯å¦å·²å¯åŠ¨ã€‚
+    echo ³õÊ¼»¯Ê§°Ü: Çë¼ì²é root ÃÜÂëÊÇ·ñÕıÈ·¡¢MySQL ·şÎñÊÇ·ñÒÑÆô¶¯¡£
     pause
     exit /b 1
 )
-echo æ•°æ®åº“è´¦å·åˆå§‹åŒ–å®Œæˆï¼
-echo ç°åœ¨å¯ä»¥åŒå‡» å¯åŠ¨.bat è¿è¡Œå¹³å°ã€‚
+echo Êı¾İ¿âÕËºÅ³õÊ¼»¯Íê³É!
+echo ÏÖÔÚ¿ÉÒÔË«»÷ Æô¶¯.bat ÔËĞĞÆ½Ì¨¡£
 pause

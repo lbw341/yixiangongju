@@ -1,21 +1,19 @@
 @echo off
-setlocal enabledelayedexpansion
-chcp 65001 >nul
+chcp 936 >nul
 set "ROOT=%~dp0"
 
-:: ä¼˜å…ˆä½¿ç”¨ runtime å†…çš„ JDK/Maven
 if exist "%ROOT%runtime\jdk-21\bin\java.exe" set "PATH=%ROOT%runtime\jdk-21\bin;%PATH%"
 if exist "%ROOT%runtime\maven\bin\mvn.cmd"    set "PATH=%ROOT%runtime\maven\bin;%PATH%"
 if exist "%ROOT%runtime\python\python.exe"    set "PATH=%ROOT%runtime\python;%PATH%"
 
 echo ============================================
-echo   ä¸€çº¿å·¥å…·å¹³å° - å¯åŠ¨
+echo   Ò»Ïß¹¤¾ßÆ½Ì¨ - Æô¶¯
 echo ============================================
-where java >nul 2>nul || (echo [é”™è¯¯] æœªæ‰¾åˆ° javaï¼Œè¯·å…ˆè¿è¡Œã€Œä¸€é”®éƒ¨ç½².batã€& pause & exit /b 1)
-where mvn  >nul 2>nul || (echo [é”™è¯¯] æœªæ‰¾åˆ° mvnï¼Œè¯·å…ˆè¿è¡Œã€Œä¸€é”®éƒ¨ç½².batã€& pause & exit /b 1)
+where java >nul 2>nul || (echo [´íÎó] Î´ÕÒµ½ java,ÇëÏÈÔËĞĞÒ»¼ü²¿Êğ.bat & pause & exit /b 1)
+where mvn  >nul 2>nul || (echo [´íÎó] Î´ÕÒµ½ mvn,ÇëÏÈÔËĞĞÒ»¼ü²¿Êğ.bat & pause & exit /b 1)
 
 cd /d "%ROOT%backend-java"
-echo å¯åŠ¨æˆåŠŸåè¯·è®¿é—®: http://localhost:5000
+echo Æô¶¯³É¹¦ºóÇë·ÃÎÊ: http://localhost:5000
 echo.
 call mvn spring-boot:run
 pause

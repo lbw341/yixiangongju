@@ -1,7 +1,6 @@
 @echo off
-setlocal enabledelayedexpansion
-chcp 65001 >nul
-title ä¸€çº¿å·¥å…·å¹³å° - ä¸€é”®ç¯å¢ƒéƒ¨ç½²
+chcp 936 >nul
+title Ò»Ïß¹¤¾ßÆ½Ì¨ - Ò»¼ü»·¾³²¿Êğ
 
 set "ROOT=%~dp0"
 set "RUNTIME=%ROOT%runtime"
@@ -14,125 +13,111 @@ if not exist "%RUNTIME%" mkdir "%RUNTIME%"
 if not exist "%CACHE%"   mkdir "%CACHE%"
 
 echo ============================================
-echo   ä¸€çº¿å·¥å…·å¹³å° - ä¸€é”®ç¯å¢ƒéƒ¨ç½²
-echo   ï¼ˆé¦–æ¬¡è¿è¡Œéœ€è”ç½‘ï¼Œåç»­ç¦»çº¿å¯å¯åŠ¨ï¼‰
+echo   Ò»Ïß¹¤¾ßÆ½Ì¨ - Ò»¼ü»·¾³²¿Êğ
+echo   (Ê×´ÎÔËĞĞĞèÁªÍø,ºóĞøÀëÏß¿ÉÆô¶¯)
 echo ============================================
 echo.
 
 :: ===================== JDK 21 =====================
-echo [1/4] æ£€æŸ¥ JDK 21...
+echo [1/4] ¼ì²é JDK 21...
 if exist "%JAVA%" (
-    "%JAVA%" -version 2>nul | findstr /C:"21" >nul && (echo   å·²å°±ç»ª: JDK 21 & goto :MAVEN)
+    "%JAVA%" -version 2>nul | findstr /C:"21" >nul && (echo   ÒÑ¾ÍĞ÷: JDK 21 & goto :MAVEN)
 )
-echo   æ­£åœ¨ä¸‹è½½ JDK 21ï¼ˆçº¦ 180MBï¼Œè¯·è€å¿ƒç­‰å¾…ï¼‰...
+echo   ÕıÔÚÏÂÔØ JDK 21 (Ô¼ 196MB,ÇëÄÍĞÄµÈ´ı)...
 set "JDK_URL=https://mirrors.tuna.tsinghua.edu.cn/Adoptium/21/jdk/x64/windows/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip"
 set "JDK_ZIP=%CACHE%\jdk21.zip"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '%JDK_URL%' -OutFile '%JDK_ZIP%' -UseBasicParsing"
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%JDK_URL%','%JDK_ZIP%')"
 if not exist "%JDK_ZIP%" (
-    echo   [å¤±è´¥] JDK ä¸‹è½½å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œåé‡è¯•ã€‚
-    echo   æ‰‹åŠ¨å®‰è£… JDK 21 åå¯è·³è¿‡æ­¤æ­¥éª¤ã€‚
+    echo   [Ê§°Ü] JDK ÏÂÔØÊ§°Ü,Çë¼ì²éÍøÂçºóÖØÊÔ¡£
+    echo   ÊÖ¶¯°²×° JDK 21 ºó¿ÉÌø¹ı´Ë²½Öè¡£
     goto :MAVEN
 )
-echo   æ­£åœ¨è§£å‹...
+echo   ÕıÔÚ½âÑ¹...
 powershell -NoProfile -Command "Expand-Archive -Path '%JDK_ZIP%' -DestinationPath '%RUNTIME%\jdk21_tmp' -Force"
 for /d %%D in ("%RUNTIME%\jdk21_tmp\jdk-*") do rename "%%D" jdk-21 2>nul
 if not exist "%RUNTIME%\jdk-21\bin\java.exe" (
-    rem è§£å‹åç›®å½•åä¸å«ç‰ˆæœ¬å·çš„æƒ…å†µï¼Œç›´æ¥ç§»åŠ¨
     for /d %%D in ("%RUNTIME%\jdk21_tmp\*") do (
         if exist "%%D\bin\java.exe" move "%%D" "%RUNTIME%\jdk-21" >nul
     )
 )
 rd /s /q "%RUNTIME%\jdk21_tmp" 2>nul
 del "%JDK_ZIP%" 2>nul
-if exist "%JAVA%" (echo   JDK 21 å®‰è£…å®Œæˆ) else echo   [è­¦å‘Š] JDK è§£å‹å¼‚å¸¸ï¼Œåç»­è¯·ç¡®è®¤ JAVA_HOME æˆ– PATH
+if exist "%JAVA%" (echo   JDK 21 °²×°Íê³É) else echo   [¾¯¸æ] JDK ½âÑ¹Òì³£
 
 :MAVEN
-echo [2/4] æ£€æŸ¥ Maven...
-if exist "%MVN%" (echo   å·²å°±ç»ª: Maven & goto :PYTHON)
-echo   æ­£åœ¨ä¸‹è½½ Maven 3.9.16ï¼ˆçº¦ 9MBï¼‰...
+echo [2/4] ¼ì²é Maven...
+if exist "%MVN%" (echo   ÒÑ¾ÍĞ÷: Maven & goto :PYTHON)
+echo   ÕıÔÚÏÂÔØ Maven 3.9.16 (Ô¼ 9MB)...
 set "MVN_URL=https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip"
 set "MVN_ZIP=%CACHE%\maven.zip"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '%MVN_URL%' -OutFile '%MVN_ZIP%' -UseBasicParsing"
-if not exist "%MVN_ZIP%" (echo   [å¤±è´¥] Maven ä¸‹è½½å¤±è´¥ & goto :PYTHON)
-echo   æ­£åœ¨è§£å‹...
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%MVN_URL%','%MVN_ZIP%')"
+if not exist "%MVN_ZIP%" (echo   [Ê§°Ü] Maven ÏÂÔØÊ§°Ü & goto :PYTHON)
+echo   ÕıÔÚ½âÑ¹...
 powershell -NoProfile -Command "Expand-Archive -Path '%MVN_ZIP%' -DestinationPath '%RUNTIME%\maven_tmp' -Force"
 for /d %%D in ("%RUNTIME%\maven_tmp\apache-maven-*") do move "%%D" "%RUNTIME%\maven" >nul
 rd /s /q "%RUNTIME%\maven_tmp" 2>nul
 del "%MVN_ZIP%" 2>nul
-if exist "%MVN%" (echo   Maven å®‰è£…å®Œæˆ) else echo   [è­¦å‘Š] Maven è§£å‹å¼‚å¸¸
+if exist "%MVN%" (echo   Maven °²×°Íê³É) else echo   [¾¯¸æ] Maven ½âÑ¹Òì³£
 
 :PYTHON
-echo [3/4] æ£€æŸ¥ Python 3.x...
+echo [3/4] ¼ì²é Python 3.x...
 set "HAS_PY=0"
 if exist "%PY%" set "HAS_PY=1"
 if "%HAS_PY%"=="0" python --version >nul 2>nul && set "HAS_PY=1" && set "PY=python"
 if "%HAS_PY%"=="0" py --version >nul 2>nul && set "HAS_PY=1" && set "PY=py"
 if "%HAS_PY%"=="1" (
-    %PY% --version 2>nul | findstr /C:"Python 3" >nul && (echo   å·²å°±ç»ª: !PY! & goto :MYSQL)
+    %PY% --version 2>nul | findstr /C:"Python 3" >nul && (echo   ÒÑ¾ÍĞ÷: !PY! & goto :MYSQL)
 )
-echo   æ­£åœ¨ä¸‹è½½ Python 3.13ï¼ˆçº¦ 26MBï¼Œé™é»˜å®‰è£…ä¸­ï¼‰...
+echo   ÕıÔÚÏÂÔØ Python 3.13 (Ô¼ 28MB,¾²Ä¬°²×°ÖĞ)...
 set "PY_URL=https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.exe"
 set "PY_EXE=%CACHE%\python-setup.exe"
-powershell -NoProfile -Command "Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' -UseBasicParsing"
-if not exist "%PY_EXE%" (echo   [å¤±è´¥] Python ä¸‹è½½å¤±è´¥ & goto :MYSQL)
+powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PY_URL%','%PY_EXE%')"
+if not exist "%PY_EXE%" (echo   [Ê§°Ü] Python ÏÂÔØÊ§°Ü & goto :MYSQL)
 "%PY_EXE%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_test=0
-timeout /t 10 >nul
-set "PY=python"
-if exist "%RUNTIME%\python\python.exe" set "PY=%RUNTIME%\python\python.exe"
-echo   Python å®‰è£…å®Œæˆ
+timeout /t 15 >nul
+echo   Python °²×°Íê³É
 
 :MYSQL
-echo [4/4] æ£€æŸ¥ MySQL...
+echo [4/4] ¼ì²é MySQL...
 sc query MySQL >nul 2>nul && goto :MYSQL_RUNNING
 sc query MySQL57 >nul 2>nul && goto :MYSQL_RUNNING
 sc query MySQL80 >nul 2>nul && goto :MYSQL_RUNNING
-echo   [æç¤º] æœªæ£€æµ‹åˆ° MySQL æœåŠ¡ã€‚
-echo   è¯·å…ˆå®‰è£… MySQLï¼ˆæ¨è 5.7 æˆ– 8.0ï¼‰å¹¶ç¡®ä¿æœåŠ¡å·²å¯åŠ¨ã€‚
-echo   å®‰è£…åœ°å€: https://dev.mysql.com/downloads/mysql/
+echo   [ÌáÊ¾] Î´¼ì²âµ½ MySQL ·şÎñ¡£
+echo   ÇëÏÈ°²×° MySQL (ÍÆ¼ö 5.7 »ò 8.0) ²¢È·±£·şÎñÒÑÆô¶¯¡£
+echo   °²×°µØÖ·: https://dev.mysql.com/downloads/mysql/
 echo.
-set /p WAITMYSQL=å®‰è£…å¥½ MySQL åæŒ‰å›è½¦ç»§ç»­...
+set /p WAITMYSQL=°²×°ºÃ MySQL ºó°´»Ø³µ¼ÌĞø...
 goto :MYSQL
 
 :MYSQL_RUNNING
-echo   MySQL æœåŠ¡å·²å¯åŠ¨
-
-echo.
-echo ============================================
-echo   ç¯å¢ƒæ£€æŸ¥å®Œæˆ
-echo ============================================
+echo   MySQL ·şÎñÒÑÆô¶¯
 echo.
 
-:: ---- æ•°æ®åº“åˆå§‹åŒ– ----
-echo æ­£åœ¨æ£€æŸ¥æ•°æ®åº“è´¦å·...
-set "DBOK=0"
-setlocal
-set "ROOTPWD="
-set /p ROOTPWD=è¯·è¾“å…¥ MySQL root å¯†ç ï¼ˆè‹¥å·²åˆå§‹åŒ–è¿‡å¯ç›´æ¥å›è½¦ï¼‰: 
-if "%ROOTPWD%"=="" (set "DBOK=1" & goto :LAUNCH)
-echo æ­£åœ¨åˆå§‹åŒ–è´¦å·...
+:: ---- Êı¾İ¿â³õÊ¼»¯ ----
+echo ÇëÊäÈë MySQL root ÃÜÂë (ÈôÒÑ³õÊ¼»¯¹ı¿ÉÖ±½Ó»Ø³µ):
+set /p ROOTPWD=^>
+if "%ROOTPWD%"=="" goto :LAUNCH
+echo ÕıÔÚ³õÊ¼»¯ÕËºÅ...
 where mysql >nul 2>nul
 if errorlevel 1 (
-    set /p MYSQLBIN=è¯·è¾“å…¥ mysql.exe æ‰€åœ¨ç›®å½•: 
+    set /p MYSQLBIN=ÇëÊäÈë mysql.exe ËùÔÚÄ¿Â¼: 
     set "PATH=%MYSQLBIN%;%PATH%"
 )
 mysql -u root -p%ROOTPWD% --default-character-set=utf8mb4 < "%ROOT%database\init_user.sql"
 if errorlevel 1 (
-    echo [è­¦å‘Š] æ•°æ®åº“è´¦å·åˆå§‹åŒ–å¤±è´¥ï¼ˆå¯èƒ½å·²å­˜åœ¨ï¼‰ï¼Œç»§ç»­å°è¯•å¯åŠ¨...
+    echo [¾¯¸æ] Êı¾İ¿âÕËºÅ³õÊ¼»¯Ê§°Ü (¿ÉÄÜÒÑ´æÔÚ),¼ÌĞø³¢ÊÔÆô¶¯...
 ) else (
-    echo æ•°æ®åº“è´¦å·åˆå§‹åŒ–å®Œæˆ
+    echo Êı¾İ¿âÕËºÅ³õÊ¼»¯Íê³É
 )
-endlocal
 
 :LAUNCH
-:: è®¾ç½®è¿è¡Œæ—¶è·¯å¾„
 set "PATH=%RUNTIME%\jdk-21\bin;%RUNTIME%\maven\bin;%PATH%"
 cd /d "%ROOT%backend-java"
-
 echo ============================================
-echo   æ­£åœ¨å¯åŠ¨å¹³å°...
-echo   é¦–æ¬¡å¯åŠ¨å°†è‡ªåŠ¨å»ºåº“å»ºè¡¨ï¼ˆçº¦30ç§’ï¼‰
-echo   çœ‹åˆ° Started åè®¿é—®: http://localhost:5000
-echo   ç®¡ç†å‘˜è´¦å·: admin / 123456
+echo   ÕıÔÚÆô¶¯Æ½Ì¨...
+echo   Ê×´ÎÆô¶¯½«×Ô¶¯½¨¿â½¨±í (Ô¼30Ãë)
+echo   ¿´µ½ Started ºó·ÃÎÊ: http://localhost:5000
+echo   ¹ÜÀíÔ±ÕËºÅ: admin / 123456
 echo ============================================
 echo.
 call mvn spring-boot:run
