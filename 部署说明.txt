@@ -1,34 +1,43 @@
 一线工具平台 - 部署说明（Windows）
 ====================================
 
+【一键部署（推荐）】
+双击「一键部署.bat」即可自动完成全部环境搭建：
+  - 若缺 JDK 21：自动下载 Temurin 21 并解压（约 180MB，仅首次）
+  - 若缺 Maven：自动下载 3.9.9 并解压（约 9MB，仅首次）
+  - 若缺 Python 3.x：自动下载并静默安装（约 25MB，仅首次，可选不装）
+  - 检测 MySQL 服务：未安装则提示下载地址，已安装则自动启动
+  - 自动初始化数据库账号 + 建库建表 + 初始化演示数据
+  - 完成后浏览器访问 http://localhost:5000
+  - 管理员账号: admin / 123456
+
 【环境要求】
-1. JDK 21        （java -version 可查到 21.x）
-2. Maven 3.8+    （mvn -v 可正常执行，首次运行需联网下载依赖）
-3. MySQL 5.7+    （服务已启动；5.7 或 8.0 均可）
-4. Python 3.x + pip（可选：仅"脚本类工具"的在线执行需要，不装不影响平台其他功能）
+  - Windows 10/11（需联网首次运行，之后可离线启动）
+  - MySQL 5.7 或 8.0（这是唯一需要手动安装的组件）
+    下载地址: https://dev.mysql.com/downloads/mysql/
+    安装时请记住 root 密码，启动时会提示输入
 
-【三步启动】
-第 1 步：双击「一键初始化数据库.bat」
-         - 输入 root 密码，自动创建账号 tooluser / tooldb123
-         - 若提示找不到 mysql 命令，按提示输入 mysql.exe 所在目录即可
-第 2 步：双击「启动.bat」
-         - 自动建库建表、初始化管理员与演示数据
-         - 看到 Started ToolPlatformApplication 即启动成功
-第 3 步：浏览器访问 http://localhost:5000
-         - 管理员账号: admin / 123456
-
-【常见问题】
-- 端口被占用：编辑 backend-java/src/main/resources/application.properties，
-  把 server.port=5000 改成其他端口。
-- MySQL 不是默认 3306 / 账号密码不同：同上，修改 spring.datasource.url / username / password。
-- 数据库无需手动导入：连接串带 createDatabaseIfNotExist=true，
-  表结构由应用自动创建（ddl-auto=update），database/V1__init_schema.sql 仅作参考。
-- 脚本工具执行报"未安装Python"：安装 Python 并勾选 Add to PATH 后重启平台即可；
-  含 requirements.txt 的脚本包会在首次上传时自动创建虚拟环境并安装依赖。
-- 上传大小限制 100MB，可在 application.properties 的 multipart 配置中调整。
+【日常启动】
+  首次部署完成后，之后每次直接双击「启动.bat」即可（无需重新部署）。
 
 【目录说明】
-backend-java/   Spring Boot 后端（含已构建好的前端页面 static/）
-frontend/       Vue 源码（改前端后需 npm install && npm run build，普通使用可忽略）
-database/       数据库参考脚本
-docs/           设计文档
+  runtime/              一键部署自动下载的运行时环境（JDK/Maven/Python）
+  backend-java/         Spring Boot 后端（含已构建好的前端页面）
+  frontend/             Vue 源码（改前端后需 npm run build，普通使用可忽略）
+  database/             数据库脚本
+  docs/                 设计文档
+
+【常见问题】
+  Q: 提示"未找到 java"但已安装？
+  A: 运行一键部署.bat 可自动解决；或手动将 JDK 加入系统 PATH。
+
+  Q: 端口 5000 被占用？
+  A: 编辑 backend-java/src/main/resources/application.properties 修改 server.port
+
+  Q: 脚本工具执行报错？
+  A: 脚本执行依赖 Python 3.x；确保 Python 已安装并加入 PATH，
+     或重新运行一键部署.bat 自动安装。
+
+  Q: 想修改数据库配置？
+  A: 编辑 backend-java/src/main/resources/application.properties
+     修改 spring.datasource 相关配置即可。
