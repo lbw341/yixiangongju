@@ -25,9 +25,9 @@ if exist "%JAVA%" (
     "%JAVA%" -version 2>nul | findstr /C:"21" >nul && (echo   已就绪: JDK 21 & goto :MAVEN)
 )
 echo   正在下载 JDK 21（约 180MB，请耐心等待）...
-set "JDK_URL=https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse"
+set "JDK_URL=https://mirrors.tuna.tsinghua.edu.cn/Adoptium/21/jdk/x64/windows/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip"
 set "JDK_ZIP=%CACHE%\jdk21.zip"
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%JDK_URL%','%JDK_ZIP%')"
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '%JDK_URL%' -OutFile '%JDK_ZIP%' -UseBasicParsing"
 if not exist "%JDK_ZIP%" (
     echo   [失败] JDK 下载失败，请检查网络后重试。
     echo   手动安装 JDK 21 后可跳过此步骤。
@@ -49,10 +49,10 @@ if exist "%JAVA%" (echo   JDK 21 安装完成) else echo   [警告] JDK 解压�
 :MAVEN
 echo [2/4] 检查 Maven...
 if exist "%MVN%" (echo   已就绪: Maven & goto :PYTHON)
-echo   正在下载 Maven 3.9.9（约 9MB）...
-set "MVN_URL=https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip"
+echo   正在下载 Maven 3.9.16（约 9MB）...
+set "MVN_URL=https://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.zip"
 set "MVN_ZIP=%CACHE%\maven.zip"
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%MVN_URL%','%MVN_ZIP%')"
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '%MVN_URL%' -OutFile '%MVN_ZIP%' -UseBasicParsing"
 if not exist "%MVN_ZIP%" (echo   [失败] Maven 下载失败 & goto :PYTHON)
 echo   正在解压...
 powershell -NoProfile -Command "Expand-Archive -Path '%MVN_ZIP%' -DestinationPath '%RUNTIME%\maven_tmp' -Force"
@@ -70,10 +70,10 @@ if "%HAS_PY%"=="0" py --version >nul 2>nul && set "HAS_PY=1" && set "PY=py"
 if "%HAS_PY%"=="1" (
     %PY% --version 2>nul | findstr /C:"Python 3" >nul && (echo   已就绪: !PY! & goto :MYSQL)
 )
-echo   正在下载 Python 3.12（约 25MB，静默安装中）...
-set "PY_URL=https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+echo   正在下载 Python 3.13（约 26MB，静默安装中）...
+set "PY_URL=https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.exe"
 set "PY_EXE=%CACHE%\python-setup.exe"
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PY_URL%','%PY_EXE%')"
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_EXE%' -UseBasicParsing"
 if not exist "%PY_EXE%" (echo   [失败] Python 下载失败 & goto :MYSQL)
 "%PY_EXE%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_test=0
 timeout /t 10 >nul
