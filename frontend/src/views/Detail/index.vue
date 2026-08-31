@@ -44,7 +44,7 @@
             <p class="text-sm text-gray-500 mb-3">或使用文件方式：</p>
             <div class="border rounded-lg p-4 flex flex-wrap items-center gap-4">
               <button v-if="tool.templateFile" @click="downloadTemplate('template')" class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2">
-                <i class="fas fa-download"></i> 下载脚本模板
+                <i class="fas fa-download"></i> {{ isPackage ? '下载脚本模板（压缩包）' : '下载脚本模板（单文件）' }}
               </button>
               <button v-if="tool.formatTemplate" @click="downloadTemplate('format')" class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2">
                 <i class="fas fa-download"></i> 下载格式模板
@@ -61,6 +61,8 @@
                 <i class="fas fa-play"></i> {{ running ? '运行中...' : '运行' }}
               </button>
             </div>
+
+            <p v-if="isPackage" class="text-xs text-gray-500 mt-2">提示：模板为压缩包形式，回传上传请保留目录结构，脚本将按位置读取模板文件。</p>
 
             <div v-if="pendingFiles.length" class="mt-3">
               <p class="text-sm font-medium mb-2">已选择 {{ pendingFiles.length }} 个文件：</p>
@@ -204,6 +206,7 @@ const running = ref(false)
 
 const typeColor = computed(() => getToolTypeColors()[tool.value?.type] || 'bg-gray-100 text-gray-800')
 const keywords = computed(() => (tool.value?.keywords || '').split(',').filter(k => k.trim()).map(k => k.trim()))
+const isPackage = computed(() => !!tool.value?.isPackage)
 const reviews = computed(() => tool.value?.reviews || [])
 const isWeeklyGenerator = computed(() => (tool.value?.name || '').includes('周报'))
 
@@ -276,7 +279,11 @@ function onFilesPicked(event) {
   const picked = Array.from(event.target.files || [])
   event.target.value = ''
   picked.forEach(f => {
-    if (!pendingFiles.value.some(g => g.name === f.name && g.size === f.size)) pendingFiles.value.push(f)
+    const rel = f.webkitRelativePath || ''
+    const uploadFile = rel && rel !== f.name
+      ? new File([f], rel, { type: f.type || '' })
+      : f
+    if (!pendingFiles.value.some(g => g.name === uploadFile.name && g.size === uploadFile.size)) pendingFiles.value.push(uploadFile)
   })
 }
 
