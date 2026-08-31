@@ -42,21 +42,24 @@
           <!-- 文件方式 -->
           <div class="border-t border-gray-200 pt-4">
             <p class="text-sm text-gray-500 mb-3">或使用文件方式：</p>
-            <div class="border rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-              <button v-if="tool.templateFile" @click="downloadTemplate('template')" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+            <div class="border rounded-lg p-4 flex flex-wrap items-center gap-4">
+              <button v-if="tool.templateFile" @click="downloadTemplate('template')" class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2">
                 <i class="fas fa-download"></i> 下载脚本模板
               </button>
-              <button v-if="tool.formatTemplate" @click="downloadTemplate('format')" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center gap-2">
+              <button v-if="tool.formatTemplate" @click="downloadTemplate('format')" class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2">
                 <i class="fas fa-download"></i> 下载格式模板
               </button>
-              <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
+              <label class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fas fa-upload"></i> 选择文件（支持压缩包）
-                <input type="file" class="sr-only" @change="onFilesPicked" accept=".xlsx,.csv,.json,.zip,.py,.sh,.bat,.txt,.xls,.md,.log,.ps1" multiple>
+                <input type="file" class="sr-only" @change="onFilesPicked" accept=".xlsx,.csv,.json,.zip,.py,.sh,.txt,.xls,.md,.log" multiple>
               </label>
-              <label class="w-full bg-white border border-gray-300 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 cursor-pointer">
+              <label class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fas fa-folder-open"></i> 选择文件夹
                 <input type="file" class="sr-only" @change="onFilesPicked" webkitdirectory multiple>
               </label>
+              <button @click="runTool" :disabled="running || !pendingFiles.length" class="w-full sm:w-auto bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2">
+                <i class="fas fa-play"></i> {{ running ? '运行中...' : '运行' }}
+              </button>
             </div>
 
             <div v-if="pendingFiles.length" class="mt-3">
@@ -67,9 +70,6 @@
                   <button type="button" @click="removePendingFile(i)" class="text-indigo-400 hover:text-red-500">&times;</button>
                 </li>
               </ul>
-              <button @click="runTool" :disabled="running" class="mt-3 w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-                <i class="fas fa-play"></i> {{ running ? '运行中...' : '运行' }}
-              </button>
             </div>
           </div>
 
