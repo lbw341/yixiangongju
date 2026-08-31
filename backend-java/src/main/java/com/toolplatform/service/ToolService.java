@@ -33,9 +33,11 @@ public class ToolService {
     @Value("${upload.result-dir}")
     private String resultDir;
 
-    private static final Set<String> ALLOWED_EXT = Set.of("xlsx", "csv", "json", "zip", "py", "sh", "bat", "ps1", "txt", "xls");
     private static final Set<String> TEXT_EXT = Set.of("txt", "md", "log", "py", "sh", "bat", "ps1", "json", "csv");
     private static final Set<String> EXCEL_EXT = Set.of("xlsx", "xls");
+    private static final Set<String> BLOCKED_EXT = Set.of("exe", "dll", "bat", "cmd", "ps1", "msi", "scr", "com", "jar");
+    private static final int MAX_ZIP_ENTRIES = 500;
+    private static final long MAX_ZIP_BYTES = 200L * 1024 * 1024;
 
     private final ToolRepository toolRepo;
     private final DownloadStatRepository statRepo;
@@ -188,36 +190,48 @@ public class ToolService {
                 Map<String, String> tempPyFiles = new LinkedHashMap<>();
                 Map<String, byte[]> tempDataFiles = new LinkedHashMap<>();
 
+                int count = 0;
+                long totalBytes = 0;
                 Enumeration<? extends ZipEntry> entries = zipFile.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry entry = entries.nextElement();
                     if (entry.isDirectory()) continue;
+                    count++;
+                    if (count > MAX_ZIP_ENTRIES) {
+                        throw new IOException("包内文件数超过上限(" + MAX_ZIP_ENTRIES + ")");
+                    }
 
                     String entryName = entry.getName();
-                    String ext = entryName.contains(".") ? entryName.substring(entryName.lastIndexOf('.') + 1).toLowerCase() : "";
+                    if (isBlockedFileName(entryName)) {
+                        throw new IOException("不允许的可执行文件: " + entryName);
+                    }
 
                     byte[] bytes;
                     try (InputStream is = zipFile.getInputStream(entry)) {
                         bytes = is.readAllBytes();
                     }
+                    totalBytes += bytes.length;
+                    if (totalBytes > MAX_ZIP_BYTES) {
+                        throw new IOException("解压后总大小超过上限(" + (MAX_ZIP_BYTES / 1024 / 1024) + "MB)");
+                    }
 
+                    tempDataFiles.put(entryName, bytes);
+
+                    String ext = extOf(entryName);
                     if ("py".equalsIgnoreCase(ext)) {
-                        String pyCode = new String(bytes, StandardCharsets.UTF_8);
-                        tempPyFiles.put(entryName, pyCode);
+                        tempPyFiles.put(entryName, new String(bytes, StandardCharsets.UTF_8));
                         tempFiles.add(entryName);
                     } else if (TEXT_EXT.contains(ext)) {
                         tempContent.append("===== 文件: ").append(entryName).append(" =====\n");
                         tempContent.append(decodeTextContent(bytes));
                         tempContent.append("\n\n");
                         tempFiles.add(entryName);
-                        tempDataFiles.put(entryName, bytes);
                     } else if (EXCEL_EXT.contains(ext)) {
                         tempContent.append("===== Excel文件: ").append(entryName).append(" =====\n");
                         ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
                         tempContent.append(readExcelContent(bais));
                         tempContent.append("\n\n");
                         tempFiles.add(entryName);
-                        tempDataFiles.put(entryName, bytes);
                     }
                 }
 
@@ -228,6 +242,10 @@ public class ToolService {
                 success = true;
                 break;
             } catch (Exception e) {
+                if (e instanceof IOException && e.getMessage() != null
+                        && (e.getMessage().contains("不允许") || e.getMessage().contains("超过上限"))) {
+                    throw new IOException(e.getMessage());
+                }
                 lastError = e;
             }
         }
@@ -261,22 +279,18 @@ public class ToolService {
         for (MultipartFile file : files) {
             if (file.isEmpty()) continue;
 
-            String originalName = file.getOriginalFilename();
-            String ext = originalName != null && originalName.contains(".")
-                    ? originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase() : "";
-
-            if (!ALLOWED_EXT.contains(ext)) {
-                continue;
+            String originalName = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+            if (isBlockedFileName(originalName)) {
+                throw new IOException("不允许上传的可执行文件: " + originalName);
             }
+
+            String ext = extOf(originalName);
 
             if ("zip".equalsIgnoreCase(ext)) {
                 ZipExtractResult zipResult = extractZipContent(file.getInputStream());
                 allContent.append(zipResult.getContent());
                 processedFiles.addAll(zipResult.getProcessedFiles());
                 allDataFiles.putAll(zipResult.getDataFiles());
-                for (Map.Entry<String, String> py : zipResult.getPythonFiles().entrySet()) {
-                    allDataFiles.put(py.getKey(), py.getValue().getBytes(StandardCharsets.UTF_8));
-                }
             } else if ("xlsx".equalsIgnoreCase(ext) || "xls".equalsIgnoreCase(ext)) {
                 byte[] fileBytes = file.getInputStream().readAllBytes();
                 String excelContent = readExcelContent(new ByteArrayInputStream(fileBytes));
@@ -284,11 +298,15 @@ public class ToolService {
                 allContent.append(excelContent).append("\n\n");
                 processedFiles.add(originalName);
                 allDataFiles.put(originalName, fileBytes);
-            } else {
+            } else if (TEXT_EXT.contains(ext)) {
                 byte[] fileBytes = file.getInputStream().readAllBytes();
                 String fileContent = new String(fileBytes, StandardCharsets.UTF_8);
                 allContent.append("===== 文件: ").append(originalName).append(" =====\n");
                 allContent.append(fileContent).append("\n\n");
+                processedFiles.add(originalName);
+                allDataFiles.put(originalName, fileBytes);
+            } else {
+                byte[] fileBytes = file.getInputStream().readAllBytes();
                 processedFiles.add(originalName);
                 allDataFiles.put(originalName, fileBytes);
             }
@@ -476,6 +494,15 @@ public class ToolService {
      */
     public Path getTemplatePath(String templateFile) {
         return Paths.get(templateDir, templateFile);
+    }
+
+    private static String extOf(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+    }
+
+    static boolean isBlockedFileName(String name) {
+        return BLOCKED_EXT.contains(extOf(name));
     }
 
     private String decodeTextContent(byte[] bytes) {
