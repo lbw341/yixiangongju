@@ -525,6 +525,7 @@ public class ToolController extends BaseController {
         m.put("authorName", t.getAuthorName());
         m.put("templateFile", t.getTemplateFile());
         m.put("formatTemplate", t.getFormatTemplate());
+        m.put("isPackage", t.getPackageDir() != null && !t.getPackageDir().isEmpty());
         m.put("status", t.getStatus());
         m.put("downloads", t.getDownloads());
         m.put("calls", t.getCalls());
