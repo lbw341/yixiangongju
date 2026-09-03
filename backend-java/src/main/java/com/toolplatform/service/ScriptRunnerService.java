@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * 脚本执行服务
  * 只负责"运行一个脚本并收回结果"，不感知工具/模板业务。
  * 按 runtime 分发到对应的 ToolRunner，并注入统一的 I/O 环境变量。
- * 约定: <interpreter> <script> <dataDir> [file1] [file2] ...
+ * 约定: <interpreter> [-u] <script> <dataDir> [file1] [file2] ...
  * sys.argv[1] 恒为数据目录，sys.argv[2:] 为数据文件列表（可为空）。
  * 环境变量: DATA_DIR / INPUT_FILES(JSON数组) / RESULT_DIR。
  */
@@ -68,6 +68,7 @@ public class ScriptRunnerService {
         return runProcess((dataDir, filePaths) -> {
             List<String> command = new ArrayList<>();
             command.add(resolved);
+            command.add("-u");
             command.add(script);
             command.add(dataDir.toAbsolutePath().toString());
             command.addAll(filePaths);
