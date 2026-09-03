@@ -29,6 +29,10 @@ public class Tool {
     @Column(name = "entry_file")
     private String entryFile = "";
 
+    /** 工具运行时：python | node | java，默认 python */
+    @Column(name = "runtime", nullable = false)
+    private String runtime = "python";
+
     private String formatTemplate = "";
     private String status = "online";
     private int downloads = 0;
@@ -64,6 +68,8 @@ public class Tool {
     public void setPackageDir(String packageDir) { this.packageDir = packageDir; }
     public String getEntryFile() { return entryFile; }
     public void setEntryFile(String entryFile) { this.entryFile = entryFile; }
+    public String getRuntime() { return runtime; }
+    public void setRuntime(String runtime) { this.runtime = runtime; }
     public String getFormatTemplate() { return formatTemplate; }
     public void setFormatTemplate(String formatTemplate) { this.formatTemplate = formatTemplate; }
     public String getStatus() { return status; }
