@@ -11,6 +11,7 @@
         <h1 class="text-4xl font-bold">{{ tool.name }}</h1>
         <div class="flex items-center gap-2 mt-2">
           <span :class="['px-2 py-1 text-xs rounded font-semibold', typeColor]">{{ tool.type }}</span>
+          <span v-if="tool.runtime" class="px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-800">{{ tool.runtime }}</span>
           <span v-for="kw in keywords" :key="kw" class="bg-gray-200 text-sm px-2 py-1 rounded">{{ kw }}</span>
         </div>
         <p class="mt-4 text-gray-500">由 <strong>{{ tool.authorName }}</strong> ({{ tool.department || '' }}) 提供</p>

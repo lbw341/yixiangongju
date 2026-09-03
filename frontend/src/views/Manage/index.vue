@@ -71,6 +71,14 @@
             </select>
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">运行时</label>
+            <select v-model="editForm.runtime" required class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="python">Python</option>
+              <option value="node">Node.js</option>
+              <option value="java">Java</option>
+            </select>
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
             <select v-model="editForm.category" required class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="规划">规划</option>
@@ -230,6 +238,7 @@ function openEdit(tool) {
   Object.assign(editForm, {
     name: tool.name || '',
     type: tool.type || '',
+    runtime: tool.runtime || 'python',
     category: tool.category || '',
     keywords: tool.keywords || '',
     department: tool.department || '',
