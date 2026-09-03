@@ -48,18 +48,31 @@ public class ScriptRunnerService {
     }
 
     /**
-     * 运行脚本并捕获输出（自动按 python runtime）。数据文件写入临时目录后以绝对路径传给脚本。
+     * 运行脚本并捕获输出（自动按 python 解释器探测）。数据文件写入临时目录后以绝对路径传给脚本。
      * 无论成功失败，临时工作目录都会被清理。
      */
     public ScriptRunResult run(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        return runBy("python", scriptFile, dataFiles);
+        return run(null, scriptFile, dataFiles);
     }
 
     /**
-     * 显式指定解释器/runtime（pythonCmd 为 null 时自动按 python runtime 探测）
+     * 显式指定 python 解释器路径（interpreter 为 null 时自动探测；探测不到返回 pythonMissing）。
+     * 第一参保持为解释器路径语义（ToolService 会传 venv 绝对路径），不得当作 runtime。
      */
-    public ScriptRunResult run(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        return runBy(pythonCmd == null ? "python" : pythonCmd, scriptFile, dataFiles);
+    public ScriptRunResult run(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        String resolved = interpreter != null ? interpreter : findPythonCommand();
+        if (resolved == null) {
+            return ScriptRunResult.pythonMissing();
+        }
+        String script = scriptFile.toAbsolutePath().toString();
+        return runProcess((dataDir, filePaths) -> {
+            List<String> command = new ArrayList<>();
+            command.add(resolved);
+            command.add(script);
+            command.add(dataDir.toAbsolutePath().toString());
+            command.addAll(filePaths);
+            return command;
+        }, dataFiles, "python", true);
     }
 
     /**
@@ -67,26 +80,54 @@ public class ScriptRunnerService {
      * 未知 runtime 或对应解释器缺失时返回 runtimeMissing。
      */
     public ScriptRunResult runBy(String runtime, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        ToolRunner runner = runners.get(runtime);
+        if (runner == null) {
+            return ScriptRunResult.runtimeMissing(runtime);
+        }
+        String script = scriptFile.toAbsolutePath().toString();
+        return runProcess((dataDir, filePaths) ->
+                        runner.buildCommand(script, dataDir, filePaths),
+                dataFiles, runtime, "python".equals(runtime));
+    }
+
+    /**
+     * command 构建器：给定 dataDir 与数据文件绝对路径列表，产出完整命令行。
+     */
+    @FunctionalInterface
+    private interface CommandBuilder {
+        List<String> build(Path dataDir, List<String> filePaths);
+    }
+
+    /**
+     * 把数据文件写入 dataDir 并返回其绝对路径列表（按净化文件名写入，避免目录穿越）。
+     */
+    private static List<String> writeDataFiles(Path dataDir, Map<String, byte[]> dataFiles) throws IOException {
+        List<String> dataFilePaths = new ArrayList<>();
+        if (dataFiles != null) {
+            for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
+                Path dataFile = resolveDataPath(dataDir, entry.getKey());
+                Files.createDirectories(dataFile.getParent());
+                Files.write(dataFile, entry.getValue());
+                dataFilePaths.add(dataFile.toAbsolutePath().toString());
+            }
+        }
+        return dataFilePaths;
+    }
+
+    /**
+     * 共享进程运行逻辑：创建/清理临时工作目录、通过 CommandBuilder 产出命令行、
+     * 注入 I/O 环境变量、启动/等待/超时/捕获输出。
+     * command 首元素为 null（该语言解释器缺失）时返回 runtimeMissing。
+     */
+    private ScriptRunResult runProcess(CommandBuilder commandBuilder, Map<String, byte[]> dataFiles,
+                                        String runtime, boolean isPython) throws IOException, InterruptedException {
         Path workDir = Files.createTempDirectory("tool_script_");
         try {
             Path dataDir = workDir.resolve("data");
             Files.createDirectories(dataDir);
-            List<String> dataFilePaths = new ArrayList<>();
-            if (dataFiles != null) {
-                for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
-                    Path dataFile = resolveDataPath(dataDir, entry.getKey());
-                    Files.createDirectories(dataFile.getParent());
-                    Files.write(dataFile, entry.getValue());
-                    dataFilePaths.add(dataFile.toAbsolutePath().toString());
-                }
-            }
+            List<String> dataFilePaths = writeDataFiles(dataDir, dataFiles);
 
-            ToolRunner runner = runners.get(runtime);
-            if (runner == null) {
-                return ScriptRunResult.runtimeMissing(runtime);
-            }
-
-            List<String> command = runner.buildCommand(scriptFile.toAbsolutePath().toString(), dataDir, dataFilePaths);
+            List<String> command = commandBuilder.build(dataDir, dataFilePaths);
             if (command == null || command.isEmpty() || command.get(0) == null) {
                 return ScriptRunResult.runtimeMissing(runtime);
             }
@@ -101,7 +142,7 @@ public class ScriptRunnerService {
             pb.environment().put("INPUT_FILES", OBJECT_MAPPER.writeValueAsString(dataFilePaths));
             pb.environment().put("RESULT_DIR", resultDir.toAbsolutePath().toString());
 
-            if ("python".equals(runtime)) {
+            if (isPython) {
                 pb.environment().put("PYTHONIOENCODING", "utf-8");
                 pb.environment().put("PYTHONUTF8", "1");
             }

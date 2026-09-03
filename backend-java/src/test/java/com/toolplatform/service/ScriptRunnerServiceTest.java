@@ -53,12 +53,22 @@ class ScriptRunnerServiceTest {
     }
 
     @Test
-    void runDispatchesUnknownRuntimeToRuntimeMissing() throws Exception {
+    void runByDispatchesUnknownRuntimeToRuntimeMissing() throws Exception {
         ScriptRunnerService svc = new ScriptRunnerService(new CommandResolver(),
                 List.of(new PythonRunner()));
         Path script = Files.createTempFile("s", ".py");
-        ScriptRunnerService.ScriptRunResult r = svc.run("go", script, new java.util.HashMap<>());
+        ScriptRunnerService.ScriptRunResult r = svc.runBy("go", script, new java.util.HashMap<>());
         assertFalse(r.isPythonFound());
+        Files.deleteIfExists(script);
+    }
+
+    @Test
+    void runUsesInterpreterPathSemanticsPreservingVenv() throws Exception {
+        ScriptRunnerService svc = new ScriptRunnerService(new CommandResolver(),
+                List.of(new PythonRunner()));
+        Path script = Files.createTempFile("s", ".py");
+        assertThrows(java.io.IOException.class,
+                () -> svc.run("C:/venv/Scripts/python.exe", script, new java.util.HashMap<>()));
         Files.deleteIfExists(script);
     }
 }
