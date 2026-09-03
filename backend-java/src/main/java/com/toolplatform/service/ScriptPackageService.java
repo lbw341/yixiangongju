@@ -172,10 +172,11 @@ public class ScriptPackageService {
         return Paths.get(venvDir, String.valueOf(toolId), "bin", "python");
     }
 
-    /** 删除该工具的脚本包目录与 venv（幂等） */
+    /** 删除该工具的脚本包目录、venv 与 jarpkg（幂等） */
     public void deleteArtifacts(Long toolId) {
         deleteRecursively(Paths.get(scriptPackageDir, String.valueOf(toolId)).toFile());
         deleteRecursively(Paths.get(venvDir, String.valueOf(toolId)).toFile());
+        deleteRecursively(Paths.get(jarpkgDir, String.valueOf(toolId)).toFile());
     }
 
     /** 将 payload 现场打包为 zip 写入输出流（平铺模式下载用） */
@@ -277,7 +278,7 @@ public class ScriptPackageService {
         }
     }
 
-    private void copyJarLibs(Long toolId, Path payload) throws IOException {
+    void copyJarLibs(Long toolId, Path payload) throws IOException {
         Path libDir = payload.resolve("lib");
         if (!Files.isDirectory(libDir)) return;
         Path targetDir = Paths.get(jarpkgDir, String.valueOf(toolId), "lib");
