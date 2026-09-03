@@ -9,6 +9,8 @@ public class CommandResolver {
     private volatile String cachedNode;
     private volatile boolean javaChecked;
     private volatile boolean javaPresent;
+    private volatile boolean pythonChecked;
+    private volatile boolean pythonPresent;
     private final Object lock = new Object();
 
     public String resolveNode() {
@@ -26,6 +28,15 @@ public class CommandResolver {
             }
         }
         return javaPresent;
+    }
+
+    public boolean isPythonPresent() {
+        if (!pythonChecked) {
+            synchronized (lock) {
+                if (!pythonChecked) { pythonPresent = detect("python") != null; pythonChecked = true; }
+            }
+        }
+        return pythonPresent;
     }
 
     private String detect(String cmd) {

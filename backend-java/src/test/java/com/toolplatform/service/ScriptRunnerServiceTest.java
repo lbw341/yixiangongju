@@ -2,6 +2,7 @@ package com.toolplatform.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -49,5 +50,15 @@ class ScriptRunnerServiceTest {
         assertFalse(p.equals(dir));
         assertTrue(p.startsWith(dir));
         assertFalse(p.equals(dir.resolve(".")));
+    }
+
+    @Test
+    void runDispatchesUnknownRuntimeToRuntimeMissing() throws Exception {
+        ScriptRunnerService svc = new ScriptRunnerService(new CommandResolver(),
+                List.of(new PythonRunner()));
+        Path script = Files.createTempFile("s", ".py");
+        ScriptRunnerService.ScriptRunResult r = svc.run("go", script, new java.util.HashMap<>());
+        assertFalse(r.isPythonFound());
+        Files.deleteIfExists(script);
     }
 }

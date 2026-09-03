@@ -1,5 +1,7 @@
 package com.toolplatform.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -11,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -18,8 +21,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * 脚本执行服务
  * 只负责"运行一个脚本并收回结果"，不感知工具/模板业务。
- * 约定: <python> -u <script> <dataDir> [file1] [file2] ...
+ * 按 runtime 分发到对应的 ToolRunner，并注入统一的 I/O 环境变量。
+ * 约定: <interpreter> <script> <dataDir> [file1] [file2] ...
  * sys.argv[1] 恒为数据目录，sys.argv[2:] 为数据文件列表（可为空）。
+ * 环境变量: DATA_DIR / INPUT_FILES(JSON数组) / RESULT_DIR。
  */
 @Service
 public class ScriptRunnerService {
@@ -27,23 +32,41 @@ public class ScriptRunnerService {
     private static final int MAX_OUTPUT_LINES = 5000;
     private static final long MAX_OUTPUT_CHARS = 1_000_000;
     private static final int TIMEOUT_SECONDS = 120;
+    private static final int JAVA_TIMEOUT_SECONDS = 180;
 
-    private final Object pythonLookupLock = new Object();
-    private volatile boolean pythonLookupDone;
-    private volatile String cachedPythonCmd;
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    /**
-     * 运行脚本并捕获输出（解释器自动探测）。数据文件写入临时目录后以绝对路径传给脚本。
-     * 无论成功失败，临时工作目录都会被清理。
-     */
-    public ScriptRunResult run(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        return run(null, scriptFile, dataFiles);
+    private final CommandResolver resolver;
+    private final Map<String, ToolRunner> runners;
+
+    @Autowired
+    public ScriptRunnerService(CommandResolver resolver, List<ToolRunner> runners) {
+        this.resolver = resolver;
+        Map<String, ToolRunner> m = new HashMap<>();
+        if (runners != null) for (ToolRunner r : runners) m.put(r.runtimeType(), r);
+        this.runners = m;
     }
 
     /**
-     * 显式指定解释器（pythonCmd 为 null 时自动探测缓存结果）
+     * 运行脚本并捕获输出（自动按 python runtime）。数据文件写入临时目录后以绝对路径传给脚本。
+     * 无论成功失败，临时工作目录都会被清理。
+     */
+    public ScriptRunResult run(Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        return runBy("python", scriptFile, dataFiles);
+    }
+
+    /**
+     * 显式指定解释器/runtime（pythonCmd 为 null 时自动按 python runtime 探测）
      */
     public ScriptRunResult run(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
+        return runBy(pythonCmd == null ? "python" : pythonCmd, scriptFile, dataFiles);
+    }
+
+    /**
+     * 按 runtime 分发到对应 ToolRunner 并统一注入 I/O 环境变量。
+     * 未知 runtime 或对应解释器缺失时返回 runtimeMissing。
+     */
+    public ScriptRunResult runBy(String runtime, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
         Path workDir = Files.createTempDirectory("tool_script_");
         try {
             Path dataDir = workDir.resolve("data");
@@ -58,39 +81,47 @@ public class ScriptRunnerService {
                 }
             }
 
-            String resolved = pythonCmd != null ? pythonCmd : findPythonCommand();
-            if (resolved == null) {
-                return ScriptRunResult.pythonMissing();
+            ToolRunner runner = runners.get(runtime);
+            if (runner == null) {
+                return ScriptRunResult.runtimeMissing(runtime);
             }
 
-            List<String> command = new ArrayList<>();
-            command.add(resolved);
-            command.add("-u");
-            command.add(scriptFile.toAbsolutePath().toString());
-            command.add(dataDir.toAbsolutePath().toString());
-            command.addAll(dataFilePaths);
+            List<String> command = runner.buildCommand(scriptFile.toAbsolutePath().toString(), dataDir, dataFilePaths);
+            if (command == null || command.isEmpty() || command.get(0) == null) {
+                return ScriptRunResult.runtimeMissing(runtime);
+            }
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
             pb.directory(workDir.toFile());
-            pb.environment().put("PYTHONIOENCODING", "utf-8");
-            pb.environment().put("PYTHONUTF8", "1");
+
+            Path resultDir = workDir.resolve("result");
+            Files.createDirectories(resultDir);
+            pb.environment().put("DATA_DIR", dataDir.toAbsolutePath().toString());
+            pb.environment().put("INPUT_FILES", OBJECT_MAPPER.writeValueAsString(dataFilePaths));
+            pb.environment().put("RESULT_DIR", resultDir.toAbsolutePath().toString());
+
+            if ("python".equals(runtime)) {
+                pb.environment().put("PYTHONIOENCODING", "utf-8");
+                pb.environment().put("PYTHONUTF8", "1");
+            }
 
             Process process = pb.start();
 
             StringBuffer output = new StringBuffer();
             Thread readerThread = startOutputReader(process.getInputStream(), output);
 
-            boolean completed = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            int timeout = "java".equals(runtime) ? JAVA_TIMEOUT_SECONDS : TIMEOUT_SECONDS;
+            boolean completed = process.waitFor(timeout, TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
             }
             readerThread.join(2000);
 
             if (!completed) {
-                return ScriptRunResult.timedOut(output.toString());
+                return ScriptRunResult.timedOut(output.toString(), runtime);
             }
-            return ScriptRunResult.of(process.exitValue(), output.toString());
+            return ScriptRunResult.of(process.exitValue(), output.toString(), runtime);
         } finally {
             deleteDirectory(workDir.toFile());
         }
@@ -140,59 +171,10 @@ public class ScriptRunnerService {
     }
 
     /**
-     * Python 解释器探测，进程内只探测一次（含否定结果缓存）
-     * 供脚本包依赖安装复用
+     * Python 解释器探测（委托 resolver 缓存），供脚本包依赖安装复用
      */
     public String findPythonCommand() {
-        if (pythonLookupDone) {
-            return cachedPythonCmd;
-        }
-        synchronized (pythonLookupLock) {
-            if (!pythonLookupDone) {
-                cachedPythonCmd = detectPythonCommand();
-                pythonLookupDone = true;
-            }
-        }
-        return cachedPythonCmd;
-    }
-
-    private String detectPythonCommand() {
-        String[] candidates = {"python", "python3", "py"};
-        for (String cmd : candidates) {
-            try {
-                ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
-                Process p = pb.start();
-                boolean ok = p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0;
-                p.destroyForcibly();
-                if (ok) {
-                    return cmd;
-                }
-            } catch (Exception e) {
-                // 探测失败继续尝试下一个候选
-            }
-        }
-
-        String[] paths = {
-                "C:\\Python39\\python.exe",
-                "C:\\Python310\\python.exe",
-                "C:\\Python311\\python.exe",
-                "C:\\Python312\\python.exe",
-                "C:\\Program Files\\Python39\\python.exe",
-                "C:\\Program Files\\Python310\\python.exe",
-                "C:\\Program Files\\Python311\\python.exe",
-                "C:\\Program Files\\Python312\\python.exe",
-                "C:\\Program Files (x86)\\Python39\\python.exe",
-                "C:\\Program Files (x86)\\Python310\\python.exe",
-                "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-                "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
-        };
-        for (String path : paths) {
-            if (new File(path).exists()) {
-                return path;
-            }
-        }
-
-        return null;
+        return resolver.isPythonPresent() ? "python" : null;
     }
 
     /**
@@ -249,29 +231,44 @@ public class ScriptRunnerService {
         private final boolean timedOut;
         private final int exitCode;
         private final String output;
+        private final String runtime;
 
-        private ScriptRunResult(boolean pythonFound, boolean timedOut, int exitCode, String output) {
+        private ScriptRunResult(boolean pythonFound, boolean timedOut, int exitCode, String output, String runtime) {
             this.pythonFound = pythonFound;
             this.timedOut = timedOut;
             this.exitCode = exitCode;
             this.output = output;
+            this.runtime = runtime;
         }
 
         public static ScriptRunResult pythonMissing() {
-            return new ScriptRunResult(false, false, -1, "");
+            return new ScriptRunResult(false, false, -1, "", "python");
+        }
+
+        public static ScriptRunResult runtimeMissing(String runtime) {
+            return new ScriptRunResult(false, false, -1, "", runtime);
         }
 
         public static ScriptRunResult timedOut(String output) {
-            return new ScriptRunResult(true, true, -1, output);
+            return new ScriptRunResult(true, true, -1, output, "python");
+        }
+
+        public static ScriptRunResult timedOut(String output, String runtime) {
+            return new ScriptRunResult(true, true, -1, output, runtime);
         }
 
         public static ScriptRunResult of(int exitCode, String output) {
-            return new ScriptRunResult(true, false, exitCode, output);
+            return new ScriptRunResult(true, false, exitCode, output, "python");
+        }
+
+        public static ScriptRunResult of(int exitCode, String output, String runtime) {
+            return new ScriptRunResult(true, false, exitCode, output, runtime);
         }
 
         public boolean isPythonFound() { return pythonFound; }
         public boolean isTimedOut() { return timedOut; }
         public int getExitCode() { return exitCode; }
         public String getOutput() { return output; }
+        public String getRuntime() { return runtime; }
     }
 }
