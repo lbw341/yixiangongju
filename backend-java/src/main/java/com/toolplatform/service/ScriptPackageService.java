@@ -34,7 +34,6 @@ public class ScriptPackageService {
 
     /** 平铺/压缩包成员一律禁止的可执行扩展名 */
     private static final Set<String> BLOCKED_EXT = Set.of("exe", "dll", "bat", "cmd", "ps1", "msi", "scr", "com", "jar");
-    private static final String[] ENTRY_CANDIDATES = {"main.py", "app.py", "run.py"};
     private static final String REQUIREMENTS_NAME = "requirements.txt";
     private static final int MAX_PACKAGE_ENTRIES = 500;
     private static final long MAX_PACKAGE_BYTES = 200L * 1024 * 1024;
@@ -48,10 +47,19 @@ public class ScriptPackageService {
     @Value("${upload.venv-dir}")
     private String venvDir;
 
+    @Value("${upload.jarpkg-dir:uploads/jarpkgs}")
+    private String jarpkgDir;
+
     private final ScriptRunnerService scriptRunner;
 
     public ScriptPackageService(ScriptRunnerService scriptRunner) {
         this.scriptRunner = scriptRunner;
+    }
+
+    public static String[] entryCandidatesFor(String runtime) {
+        if ("java".equals(runtime)) return new String[]{"app.jar", "main.jar", "run.jar"};
+        if ("node".equals(runtime)) return new String[]{"main.js", "app.js", "run.js", "index.js"};
+        return new String[]{"main.py", "app.py", "run.py"};
     }
 
     /** 安装失败异常，message 即用户可见文案 */
@@ -81,6 +89,10 @@ public class ScriptPackageService {
      * 任一步失败则清理半成品并抛出 PackageInstallException。
      */
     public PackageInstallResult install(Long toolId, List<MultipartFile> files) throws IOException, InterruptedException {
+        return install(toolId, files, "python");
+    }
+
+    public PackageInstallResult install(Long toolId, List<MultipartFile> files, String runtime) throws IOException, InterruptedException {
         boolean zipMode = files.size() == 1 && files.get(0).getOriginalFilename() != null
                 && files.get(0).getOriginalFilename().toLowerCase().endsWith(".zip");
         if (!zipMode) {
@@ -103,13 +115,13 @@ public class ScriptPackageService {
                 MultipartFile zip = files.get(0);
                 String originalName = zip.getOriginalFilename() == null ? "script.zip" : baseName(zip.getOriginalFilename());
                 Files.copy(zip.getInputStream(), pkgRoot.resolve("original.zip"), StandardCopyOption.REPLACE_EXISTING);
-                extractZipSafe(pkgRoot.resolve("original.zip"), payload);
+                extractZipSafe(pkgRoot.resolve("original.zip"), payload, runtime);
                 displayName = originalName;
             } else {
                 Set<String> seen = new HashSet<>();
                 for (MultipartFile f : files) {
                     String name = baseName(f.getOriginalFilename() == null ? "" : f.getOriginalFilename());
-                    checkBlocked(name);
+                    checkBlocked(name, runtime);
                     if (!seen.add(name.toLowerCase())) {
                         throw new PackageInstallException("存在重名文件: " + name);
                     }
@@ -118,13 +130,25 @@ public class ScriptPackageService {
                 displayName = firstPyIn(payload);
             }
 
-            String entryFile = resolveEntry(payload);
+            String entryFile = resolveEntry(payload, runtime);
             if (entryFile == null) {
-                throw new PackageInstallException("无法确定入口脚本：请在包根目录提供 main.py / app.py / run.py，或确保只有一个根级 .py 文件");
+                throw new PackageInstallException("无法确定入口脚本：请在包根目录提供 " + String.join(" / ", entryCandidatesFor(runtime)) + "，或确保只有一个根级入口文件");
             }
 
             if (Files.exists(payload.resolve(REQUIREMENTS_NAME))) {
                 setupVenv(toolId, payload.resolve(REQUIREMENTS_NAME));
+            }
+            if ("node".equals(runtime) && Files.exists(payload.resolve("package.json"))) {
+                RunResult npmRes = runCapture("npm", new String[]{"install", "--prefix", payload.toString()}, PIP_TIMEOUT_SECONDS);
+                if (!npmRes.completed) {
+                    throw new PackageInstallException("依赖安装超时 (" + PIP_TIMEOUT_SECONDS + "秒)\n" + tail(npmRes.output));
+                }
+                if (npmRes.exitCode != 0) {
+                    throw new PackageInstallException("依赖安装失败，请检查 package.json\n" + tail(npmRes.output));
+                }
+            }
+            if ("java".equals(runtime)) {
+                copyJarLibs(toolId, payload);
             }
 
             return new PackageInstallResult(String.valueOf(toolId), entryFile, displayName);
@@ -170,11 +194,11 @@ public class ScriptPackageService {
         }
     }
 
-    private void extractZipSafe(Path zipFile, Path payload) throws IOException {
+    private void extractZipSafe(Path zipFile, Path payload, String runtime) throws IOException {
         Exception last = null;
         for (Charset cs : List.of(StandardCharsets.UTF_8, Charset.forName("GB18030"))) {
             try {
-                doExtract(zipFile, payload, cs);
+                doExtract(zipFile, payload, cs, runtime);
                 return;
             } catch (PackageInstallException e) {
                 throw (PackageInstallException) e;
@@ -185,7 +209,7 @@ public class ScriptPackageService {
         throw new PackageInstallException("无法解析 zip 包: " + (last != null ? last.getMessage() : "未知错误"));
     }
 
-    private void doExtract(Path zipFile, Path payload, Charset cs) throws IOException {
+    private void doExtract(Path zipFile, Path payload, Charset cs, String runtime) throws IOException {
         int count = 0;
         long total = 0;
         byte[] buf = new byte[8192];
@@ -197,7 +221,7 @@ public class ScriptPackageService {
                 count++;
                 if (count > MAX_PACKAGE_ENTRIES) throw new PackageInstallException("包内文件数超过上限 (" + MAX_PACKAGE_ENTRIES + ")");
                 Path target = safeResolve(payload, e.getName());
-                checkBlocked(target.getFileName().toString());
+                checkBlocked(target.getFileName().toString(), runtime);
                 Files.createDirectories(target.getParent());
                 try (InputStream is = zf.getInputStream(e); OutputStream os = Files.newOutputStream(target)) {
                     int n;
@@ -223,18 +247,48 @@ public class ScriptPackageService {
         return target;
     }
 
-    private String resolveEntry(Path payload) throws IOException {
-        for (String cand : ENTRY_CANDIDATES) {
+    private String resolveEntry(Path payload, String runtime) throws IOException {
+        for (String cand : entryCandidatesFor(runtime)) {
             if (Files.isRegularFile(payload.resolve(cand))) return cand;
         }
         List<String> roots = new ArrayList<>();
         try (var stream = Files.list(payload)) {
             for (Path p : (Iterable<Path>) stream::iterator) {
                 String name = p.getFileName().toString();
-                if (Files.isRegularFile(p) && name.toLowerCase().endsWith(".py")) roots.add(name);
+                if (Files.isRegularFile(p) && entryExtMatches(name, runtime)) roots.add(name);
             }
         }
         return roots.size() == 1 ? roots.get(0) : null;
+    }
+
+    private boolean entryExtMatches(String name, String runtime) {
+        String lower = name.toLowerCase();
+        if ("java".equals(runtime)) return lower.endsWith(".jar");
+        if ("node".equals(runtime)) return lower.endsWith(".js") || lower.endsWith(".mjs");
+        return lower.endsWith(".py");
+    }
+
+    private void checkBlocked(String fileName, String runtime) throws PackageInstallException {
+        int dot = fileName.lastIndexOf('.');
+        String ext = dot >= 0 ? fileName.substring(dot + 1).toLowerCase() : "";
+        if ("jar".equals(ext) && "java".equals(runtime)) return;
+        if (BLOCKED_EXT.contains(ext)) {
+            throw new PackageInstallException("不允许的可执行文件: " + fileName);
+        }
+    }
+
+    private void copyJarLibs(Long toolId, Path payload) throws IOException {
+        Path libDir = payload.resolve("lib");
+        if (!Files.isDirectory(libDir)) return;
+        Path targetDir = Paths.get(jarpkgDir, String.valueOf(toolId), "lib");
+        Files.createDirectories(targetDir);
+        try (var stream = Files.list(libDir)) {
+            for (Path p : (Iterable<Path>) stream::iterator) {
+                if (Files.isRegularFile(p) && p.getFileName().toString().toLowerCase().endsWith(".jar")) {
+                    Files.copy(p, targetDir.resolve(p.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
     }
 
     private void setupVenv(Long toolId, Path requirements) throws IOException, InterruptedException {
@@ -293,14 +347,6 @@ public class ScriptPackageService {
         if (!completed) process.destroyForcibly();
         reader.join(2000);
         return new RunResult(completed, completed ? process.exitValue() : -1, output.toString());
-    }
-
-    private void checkBlocked(String fileName) throws PackageInstallException {
-        int dot = fileName.lastIndexOf('.');
-        String ext = dot >= 0 ? fileName.substring(dot + 1).toLowerCase() : "";
-        if (BLOCKED_EXT.contains(ext)) {
-            throw new PackageInstallException("不允许的可执行文件: " + fileName);
-        }
     }
 
     private String firstPyIn(Path payload) throws IOException {
