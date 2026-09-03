@@ -333,9 +333,14 @@ public class ToolService {
                 && Files.exists(scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile()))) {
             Path scriptPath = scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile());
             try {
-                Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
-                String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
-                resultContent = runScriptTemplate(py, scriptPath, allDataFiles);
+                String runtime = tool.getRuntime();
+                if (runtime == null || "python".equals(runtime)) {
+                    Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
+                    String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
+                    resultContent = runScriptTemplatePython(py, scriptPath, allDataFiles);
+                } else {
+                    resultContent = runScriptTemplateByRuntime(runtime, scriptPath, allDataFiles);
+                }
                 scriptExecuted = true;
             } catch (Exception e) {
                 resultContent = "脚本执行失败: " + e.getMessage();
@@ -392,6 +397,26 @@ public class ToolService {
         if (r.getExitCode() != 0) {
             return "执行错误 (Exit code: " + r.getExitCode() + ")\n" + r.getOutput();
         }
+        return r.getOutput();
+    }
+
+    private String runScriptTemplatePython(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles)
+            throws IOException, InterruptedException {
+        ScriptRunResult r = scriptRunner.run(interpreter, scriptFile, dataFiles);
+        if (!r.isPythonFound()) return "错误: 服务端未安装Python或Python未添加到环境变量";
+        return toResultText(r, "python");
+    }
+
+    private String runScriptTemplateByRuntime(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
+            throws IOException, InterruptedException {
+        ScriptRunResult r = scriptRunner.runBy(runtime, scriptFile, dataFiles);
+        if (!r.isPythonFound()) return "错误: 对应运行时未安装 (runtime=" + r.getRuntime() + ")";
+        return toResultText(r, runtime);
+    }
+
+    private String toResultText(ScriptRunResult r, String runtime) {
+        if (r.isTimedOut()) return "执行超时 (超过" + ("java".equals(runtime) ? 180 : 120) + "秒)\n" + r.getOutput();
+        if (r.getExitCode() != 0) return "执行错误 (Exit code: " + r.getExitCode() + ")\n" + r.getOutput();
         return r.getOutput();
     }
 

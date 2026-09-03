@@ -84,7 +84,7 @@ public class ToolController extends BaseController {
         if (tool.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
         Tool t = tool.get();
         List<Review> reviews = reviewRepo.findByToolIdOrderByCreatedAtDesc(id);
-        Map<String, Object> result = toToolMap(t);
+        Map<String, Object> result = toToolMapInternal(t);
         result.put("reviews", reviews);
         return ResponseEntity.ok(result);
     }
@@ -220,6 +220,7 @@ public class ToolController extends BaseController {
         tool.setContactPhone(form.getOrDefault("contact_phone", ""));
         tool.setInstructions(form.getOrDefault("instructions", ""));
         tool.setStatus("online");
+        tool.setRuntime(form.getOrDefault("runtime", "python"));
 
         if (file != null && !file.isEmpty()) {
             try {
@@ -251,7 +252,7 @@ public class ToolController extends BaseController {
             return ResponseEntity.status(403).body(Map.of("error", "无权修改此工具"));
         }
 
-        String[] fields = {"name","type","category","keywords","description","department","contact_email","contact_phone","instructions","faq","status"};
+        String[] fields = {"name","type","category","keywords","description","department","contact_email","contact_phone","instructions","faq","status","runtime"};
         for (String f : fields) {
             if (form.containsKey(f)) {
                 switch (f) {
@@ -266,6 +267,7 @@ public class ToolController extends BaseController {
                     case "instructions": tool.setInstructions(form.get(f)); break;
                     case "faq": tool.setFaq(form.get(f)); break;
                     case "status": tool.setStatus(form.get(f)); break;
+                    case "runtime": tool.setRuntime(form.get(f)); break;
                 }
             }
         }
@@ -281,7 +283,7 @@ public class ToolController extends BaseController {
         } else if (files != null && files.length > 0) {
             try {
                 ScriptPackageService.PackageInstallResult pkg =
-                        scriptPackageService.install(tool.getId(), Arrays.asList(files));
+                        scriptPackageService.install(tool.getId(), Arrays.asList(files), tool.getRuntime());
                 tool.setPackageDir(pkg.getPackageDir());
                 tool.setEntryFile(pkg.getEntryFile());
                 tool.setTemplateFile(pkg.getDisplayName());
@@ -396,12 +398,13 @@ public class ToolController extends BaseController {
         tool.setContactPhone(form.getOrDefault("contact_phone", ""));
         tool.setInstructions(form.getOrDefault("instructions", ""));
         tool.setStatus("online");
+        tool.setRuntime(form.getOrDefault("runtime", "python"));
 
         if (files != null && files.length > 0) {
             toolRepo.save(tool);
             try {
                 ScriptPackageService.PackageInstallResult pkg =
-                        scriptPackageService.install(tool.getId(), Arrays.asList(files));
+                        scriptPackageService.install(tool.getId(), Arrays.asList(files), tool.getRuntime());
                 tool.setPackageDir(pkg.getPackageDir());
                 tool.setEntryFile(pkg.getEntryFile());
                 tool.setTemplateFile(pkg.getDisplayName());
@@ -512,7 +515,7 @@ public class ToolController extends BaseController {
         }
     }
 
-    private Map<String, Object> toToolMap(Tool t) {
+    private static Map<String, Object> toToolMapInternal(Tool t) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", t.getId());
         m.put("name", t.getName());
@@ -533,6 +536,7 @@ public class ToolController extends BaseController {
         m.put("contactPhone", t.getContactPhone());
         m.put("instructions", t.getInstructions());
         m.put("faq", t.getFaq());
+        m.put("runtime", t.getRuntime());
         m.put("createdAt", t.getCreatedAt() != null ? t.getCreatedAt().toString() : "");
         m.put("updatedAt", t.getUpdatedAt() != null ? t.getUpdatedAt().toString() : "");
         return m;
