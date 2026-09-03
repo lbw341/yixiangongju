@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalDateTime;
@@ -352,14 +353,11 @@ public class ToolService {
             resultContent = generateWeeklyReport(allContent.toString());
         }
 
-        if (formatFile != null && Files.exists(getTemplatePath(formatFile))) {
-            String format = Files.readString(getTemplatePath(formatFile), StandardCharsets.UTF_8);
-            if (format.contains("{{result}}")) {
-                resultContent = format.replace("{{result}}", resultContent);
-            } else if (!resultContent.trim().isEmpty()) {
-                resultContent = format + "\n" + resultContent;
-            } else {
-                resultContent = format;
+        boolean isPackage = tool != null && tool.getPackageDir() != null && !tool.getPackageDir().isEmpty();
+        if (!isPackage && formatFile != null && Files.exists(getTemplatePath(formatFile))) {
+            String formatted = applyFormatTemplate(getTemplatePath(formatFile), resultContent);
+            if (formatted != null) {
+                resultContent = formatted;
             }
         }
 
@@ -503,6 +501,25 @@ public class ToolService {
 
     static boolean isBlockedFileName(String name) {
         return BLOCKED_EXT.contains(extOf(name));
+    }
+
+    /**
+     * 应用格式模板：将 {{result}} 占位符替换为脚本输出。
+     * 二进制(非UTF-8文本)模板直接返回 null，由调用方跳过拼接，避免崩溃。
+     */
+    static String applyFormatTemplate(Path formatFile, String resultContent) throws IOException {
+        String format;
+        try {
+            format = Files.readString(formatFile, StandardCharsets.UTF_8);
+        } catch (MalformedInputException e) {
+            return null;
+        }
+        if (format.contains("{{result}}")) {
+            return format.replace("{{result}}", resultContent);
+        } else if (!resultContent.trim().isEmpty()) {
+            return format + "\n" + resultContent;
+        }
+        return format;
     }
 
     private String decodeTextContent(byte[] bytes) {
