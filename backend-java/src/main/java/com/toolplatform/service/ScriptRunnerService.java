@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import com.toolplatform.util.PathUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -169,47 +170,8 @@ public class ScriptRunnerService {
         }
     }
 
-    /**
-     * 剥离路径成分并替换非法字符，拦截空名/./..
-     */
-    private static String sanitizeFileName(String originalName) {
-        int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
-        String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
-        fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-        if (fileName.isEmpty() || ".".equals(fileName) || "..".equals(fileName)) {
-            fileName = "file_" + Math.abs(originalName.hashCode());
-        }
-        return fileName;
-    }
-
-    /**
-     * 将上传的数据文件键名（可能含子目录相对路径）安全解析为 dataDir 下的写入路径。
-     * 逐组件复用 sanitizeFileName 净化；对绝对路径 / 盘符 / ".." 做穿越防护，
-     * 转换则退回按最外层文件名摊平，保证写入始终落在 dataDir 内。
-     */
     static Path resolveDataPath(Path dataDir, String name) {
-        String normalized = name.replace('\\', '/');
-        if (normalized.startsWith("/") || (normalized.length() >= 2 && normalized.charAt(1) == ':')) {
-            return dataDir.resolve(sanitizeFileName(name));
-        }
-        Path current = dataDir;
-        for (String part : normalized.split("/")) {
-            if (part.isEmpty() || ".".equals(part)) continue;
-            if ("..".equals(part)) {
-                return dataDir.resolve(sanitizeFileName(basename(normalized)));
-            }
-            current = current.resolve(sanitizeFileName(part));
-        }
-        if (!current.normalize().startsWith(dataDir.normalize())
-                || current.normalize().equals(dataDir.normalize())) {
-            return dataDir.resolve(sanitizeFileName(basename(normalized)));
-        }
-        return current;
-    }
-
-    private static String basename(String normalized) {
-        int slash = normalized.lastIndexOf('/');
-        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
+        return PathUtils.resolveDataPath(dataDir, name);
     }
 
     /**

@@ -2,6 +2,7 @@ package com.toolplatform.sandbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.toolplatform.service.ScriptRunnerService;
+import com.toolplatform.util.PathUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -125,17 +126,11 @@ public class SandboxExecutionService {
         args.add(runAsUser);
         args.add("--rm");
         args.add("--mount");
-        args.add("type=bind,source=" + dataDir.toAbsolutePath() + ",target=" + CONTAINER_DATA_DIR + ",readonly");
+        args.add("type=bind,source=" + dataDir.toAbsolutePath().toString().replace('\\', '/') + ",target=" + CONTAINER_DATA_DIR + ",readonly");
         args.add("--mount");
-        args.add("type=bind,source=" + resultDir.toAbsolutePath() + ",target=" + CONTAINER_RESULT_DIR);
+        args.add("type=bind,source=" + resultDir.toAbsolutePath().toString().replace('\\', '/') + ",target=" + CONTAINER_RESULT_DIR);
         args.add("--mount");
-        args.add("type=bind,source=" + scriptDir.toAbsolutePath() + ",target=" + CONTAINER_SCRIPT_DIR + ",readonly");
-        args.add(dockerImage);
-        args.add(launcherContainerPath);
-        args.add(runtime);
-        args.add(CONTAINER_SCRIPT_DIR + "/" + scriptName);
-        args.add(CONTAINER_DATA_DIR);
-        args.addAll(containerFilePaths);
+        args.add("type=bind,source=" + scriptDir.toAbsolutePath().toString().replace('\\', '/') + ",target=" + CONTAINER_SCRIPT_DIR + ",readonly");
 
         args.add("-e");
         args.add("DATA_DIR=" + CONTAINER_DATA_DIR);
@@ -143,6 +138,13 @@ public class SandboxExecutionService {
         args.add("INPUT_FILES=" + inputFilesJson);
         args.add("-e");
         args.add("RESULT_DIR=" + CONTAINER_RESULT_DIR);
+
+        args.add(dockerImage);
+        args.add(launcherContainerPath);
+        args.add(runtime);
+        args.add(CONTAINER_SCRIPT_DIR + "/" + scriptName);
+        args.add(CONTAINER_DATA_DIR);
+        args.addAll(containerFilePaths);
 
         return args;
     }
@@ -152,51 +154,13 @@ public class SandboxExecutionService {
         List<Path> dataFilePaths = new ArrayList<>();
         if (dataFiles != null) {
             for (Map.Entry<String, byte[]> entry : dataFiles.entrySet()) {
-                Path dataFile = resolveDataPath(dataDir, entry.getKey());
+                Path dataFile = PathUtils.resolveDataPath(dataDir, entry.getKey());
                 Files.createDirectories(dataFile.getParent());
                 Files.write(dataFile, entry.getValue());
                 dataFilePaths.add(dataFile.toAbsolutePath());
             }
         }
         return dataFilePaths;
-    }
-
-    private static Path resolveDataPath(Path dataDir, String name) {
-        String normalized = name.replace('\\', '/');
-        if (normalized.startsWith("/") || (normalized.length() >= 2 && normalized.charAt(1) == ':')) {
-            return dataDir.resolve(sanitizeFileName(name));
-        }
-        Path current = dataDir;
-        boolean fellBack = false;
-        for (String part : normalized.split("/")) {
-            if (part.isEmpty() || ".".equals(part)) continue;
-            if ("..".equals(part)) {
-                current = dataDir.resolve(sanitizeFileName(basename(normalized)));
-                fellBack = true;
-                break;
-            }
-            current = current.resolve(sanitizeFileName(part));
-        }
-        if (!fellBack && (!current.normalize().startsWith(dataDir.normalize())
-                || current.normalize().equals(dataDir.normalize()))) {
-            current = dataDir.resolve(sanitizeFileName(basename(normalized)));
-        }
-        return current;
-    }
-
-    private static String basename(String normalized) {
-        int slash = normalized.lastIndexOf('/');
-        return slash >= 0 ? normalized.substring(slash + 1) : normalized;
-    }
-
-    private static String sanitizeFileName(String originalName) {
-        int lastSlash = Math.max(originalName.lastIndexOf('/'), originalName.lastIndexOf('\\'));
-        String fileName = lastSlash >= 0 ? originalName.substring(lastSlash + 1) : originalName;
-        fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-        if (fileName.isEmpty() || ".".equals(fileName) || "..".equals(fileName)) {
-            fileName = "file_" + Math.abs(originalName.hashCode());
-        }
-        return fileName;
     }
 
     private static void deleteRecursive(Path path) {
