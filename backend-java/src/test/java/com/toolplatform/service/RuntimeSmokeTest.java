@@ -128,6 +128,69 @@ class RuntimeSmokeTest {
     }
 
     @Test
+    void javaResolvesLibJarDependencyAtRuntime() throws Exception {
+        CommandResolver cr = new CommandResolver();
+        if (!cr.isJavaPresent()) {
+            return;
+        }
+        Path tmpDir = Files.createTempDirectory("smoke_java_lib");
+        try {
+            String javaHome = System.getenv("JAVA_HOME");
+            String binDir = javaHome != null && !javaHome.isEmpty() ? javaHome + "\\bin" : null;
+            String javacPath = binDir != null ? binDir + "\\javac" : "javac";
+            String jarPath = binDir != null ? binDir + "\\jar" : "jar";
+
+            Path src = tmpDir.resolve("Smoke.java");
+            Files.writeString(src,
+                    "public class Smoke {" + System.lineSeparator() +
+                    "  public static void main(String[] a) {" + System.lineSeparator() +
+                    "    System.out.println(\"LIBOUT=\" + Lib.msg());" + System.lineSeparator() +
+                    "  }" + System.lineSeparator() +
+                    "}" + System.lineSeparator());
+            Path libSrc = tmpDir.resolve("Lib.java");
+            Files.writeString(libSrc,
+                    "public class Lib {" + System.lineSeparator() +
+                    "  public static String msg() { return \"hi-from-lib\"; }" + System.lineSeparator() +
+                    "}" + System.lineSeparator());
+
+            Path classes = tmpDir.resolve("classes");
+            Files.createDirectories(classes);
+            runAndWait(javacPath, tmpDir, "-d", classes.toAbsolutePath().toString(),
+                    libSrc.toAbsolutePath().toString(), src.toAbsolutePath().toString());
+            if (!Files.exists(classes.resolve("Smoke.class"))) {
+                return;
+            }
+
+            Path manifest = tmpDir.resolve("MANIFEST.MF");
+            Files.writeString(manifest,
+                    "Manifest-Version: 1.0" + System.lineSeparator() +
+                    "Main-Class: Smoke" + System.lineSeparator());
+            Path appJar = tmpDir.resolve("app.jar");
+            runAndWait(jarPath, classes, "cfm", appJar.toAbsolutePath().toString(),
+                    manifest.toAbsolutePath().toString(), "-C",
+                    classes.toAbsolutePath().toString(), "Smoke.class");
+            Path libDir = Files.createDirectories(tmpDir.resolve("lib"));
+            Path libJar = libDir.resolve("lib.jar");
+            runAndWait(jarPath, classes, "cf", libJar.toAbsolutePath().toString(),
+                    "-C", classes.toAbsolutePath().toString(), "Lib.class");
+            if (!Files.exists(appJar) || !Files.exists(libJar)) {
+                return;
+            }
+
+            Map<String, byte[]> data = new LinkedHashMap<>();
+            data.put("a.txt", "hello".getBytes());
+            ScriptRunnerService.ScriptRunResult r = newSvc().runBy("java", appJar, data);
+            assertEquals(0, r.getExitCode(), "stderr/stdout was: " + r.getOutput());
+            assertTrue(r.getOutput().contains("LIBOUT=hi-from-lib"), "output was: " + r.getOutput());
+        } catch (IOException e) {
+            System.out.println("javac/jar not available, skipping java lib E2E: " + e.getMessage());
+            return;
+        } finally {
+            deleteRecursive(tmpDir);
+        }
+    }
+
+    @Test
     void pythonLegacyStillWorks() throws Exception {
         Path script = Files.createTempFile("smoke", ".py");
         Files.writeString(script,
