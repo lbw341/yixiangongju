@@ -417,7 +417,7 @@ class JavaRunnerTest {
         Files.createDirectories(payload.resolve("lib"));
         String cp = JavaClasspath.build(payload);
         assertTrue(cp.startsWith(payload.toAbsolutePath().toString()));
-        assertTrue(cp.contains("lib/*"));
+        assertTrue(cp.contains("lib" + java.io.File.pathSeparator + "*"));
         assertTrue(cp.contains(";") || cp.contains(":"));
     }
 
@@ -429,7 +429,7 @@ class JavaRunnerTest {
         assertEquals("java", cmd.get(0));
         assertEquals("-jar", cmd.get(1));
         assertEquals("app.jar", cmd.get(2));
-        assertEquals(6, cmd.size());
+        assertEquals(5, cmd.size());
     }
 }
 ```
@@ -520,7 +520,9 @@ git commit -m "feat: JavaRunner与JavaClasspath"
 
 **Interfaces:**
 - Consumes: `ToolRunner`, `PythonRunner`, `NodeRunner`, `JavaRunner`, `CommandResolver`
-- Produces: `ScriptRunnerService.run(String runtime, Path scriptFile, Map<String,byte[]> dataFiles)` → `ScriptRunResult`；`ScriptRunResult.runtimeMissing(String)` 工厂
+- Produces:
+  - `ScriptRunnerService.runBy(String runtime, Path scriptFile, Map<String,byte[]>)` → `ScriptRunResult`（NEW 分发：runtime 标签 node/java/python）＋ `ScriptRunResult.runtimeMissing(String)` 工厂
+  - 保留 `run(Path, Map)` 与 `run(String interpreter, Path, Map)`：第一参 **保持为 python 解释器路径**（venv 能力），空→自动探测，探测不到→`pythonMissing()`（兼容 `ToolService` 的 venv 传参 + 既有测试）。**不得**将 `run(String,...)` 第一参当 runtime 用（会误路由 venv 绝对路径）。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -528,11 +530,11 @@ git commit -m "feat: JavaRunner与JavaClasspath"
 
 ```java
     @Test
-    void runDispatchesUnknownRuntimeToRuntimeMissing() throws Exception {
+    void runByDispatchesUnknownRuntimeToRuntimeMissing() throws Exception {
         ScriptRunnerService svc = new ScriptRunnerService(new CommandResolver(),
-                List.of(new PythonRunner(new CommandResolver())));
+                List.of(new PythonRunner()));
         Path script = Files.createTempFile("s", ".py");
-        ScriptRunnerService.ScriptRunResult r = svc.run("go", script, new java.util.HashMap<>());
+        ScriptRunnerService.ScriptRunResult r = svc.runBy("go", script, new java.util.HashMap<>());
         assertFalse(r.isPythonFound());
         Files.deleteIfExists(script);
     }
@@ -541,7 +543,7 @@ git commit -m "feat: JavaRunner与JavaClasspath"
 - [ ] **Step 2: 运行测试验证失败**
 
 Run: `cd backend-java; mvn test -Dtest=ScriptRunnerServiceTest`
-Expected: 编译失败（新构造器/`run(String runtime,...)` 不存在）。
+Expected: 编译失败（新构造器/`runBy(String runtime,...)` 不存在）。
 
 - [ ] **Step 3: 重构 ScriptRunnerService**
 
@@ -561,15 +563,19 @@ Expected: 编译失败（新构造器/`run(String runtime,...)` 不存在）。
     }
 ```
 
-2. 保留旧 `run(Path, Map)` 与 `run(String pythonCmd, Path, Map)` 签名（`ToolService`/`ScriptPackageService` 与既有测试依赖），但它们内部委托新的 `runBy("python", ...)`。
+2. 保留旧 `run(Path, Map)` 与 `run(String interpreter, Path, Map)` 签名（`ToolService`/`ScriptPackageService` 与既有测试依赖），**第一参保持为 python 解释器路径语义**：
+   - `run(Path scriptFile, Map dataFiles)` → `return run(null, scriptFile, dataFiles);`
+   - `run(String interpreter, Path scriptFile, Map dataFiles)`：`String resolved = interpreter != null ? interpreter : findPythonCommand();` 若 `resolved == null` 返回 `ScriptRunResult.pythonMissing()`；否则以 head=resolved 运行（注入同款 I/O 环境变量）。这保留 venv 能力（`ToolService` 会传 venv 绝对路径）。
 
-3. 新建 `runBy(String runtime, Path scriptFile, Map<String,byte[]> dataFiles)`：逻辑大致沿用原 46-97 行，差异：
+3. 新建 `runBy(String runtime, Path scriptFile, Map<String,byte[]> dataFiles)`（NEW 分发，供 Task 7 对 node/java 用）：
    - 取 `ToolRunner runner = runners.get(runtime)`；`runner == null` 返回 `ScriptRunResult.runtimeMissing(runtime)`。
    - `List<String> command = runner.buildCommand(scriptFile.toAbsolutePath().toString(), dataDir, dataFilePaths);`
-   - 若 `command.get(0) == null`（该语言解释器缺失）返回 `ScriptRunResult.runtimeMissing(runtime)`。
-   - 注入环境变量（`pb.environment()`）：`DATA_DIR`=dataDir 绝对路径；`INPUT_FILES`=`new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(dataFilePaths)`；`RESULT_DIR`=workDir.resolve("result") 绝对路径；python 时额外 `PYTHONIOENCODING=utf-8`、`PYTHONUTF8=1`。
+   - 若 `command == null || command.isEmpty() || command.get(0) == null`（该语言解释器缺失）返回 `ScriptRunResult.runtimeMissing(runtime)`。
+   - 注入环境变量（`pb.environment()`）：`DATA_DIR`=dataDir 绝对路径；`INPUT_FILES`=`OBJECT_MAPPER.writeValueAsString(dataFilePaths)`；`RESULT_DIR`=workDir.resolve("result") 绝对路径；python 时额外 `PYTHONIOENCODING=utf-8`、`PYTHONUTF8=1`。
    - 超时：java→180，其余→120。
    - 其余（startOutputReader、等待、timedOut、exitCode、清理临时目录）保持原样。
+
+3b. **抽取共享私有助手** `runProcess(List<String> command, Path scriptFile, Map dataFiles, String runtime, boolean isPython)`：把数据写目录、env 注入、进程启动/等待/超时/清理的公共逻辑放进来；`run(String interpreter,...)` 与 `runBy(String runtime,...)` 都调用它（二者仅 command head 推导方式不同）。注意 `run(String interpreter,...)` 里「解释器探测失败 → pythonMissing」在调用 runProcess 之前判定。
 
 4. `findPythonCommand()` 保留旧签名，内部委托 `resolver`（为兼容 `ScriptPackageService` 与既有测试；可在 `CommandResolver` 复用 `detect("python")` 逻辑返回 "python"）。
 
@@ -738,20 +744,31 @@ Expected: FAIL — `toToolMap` 不含 `runtime`，或方法为实例方法（非
         m.put("runtime", t.getRuntime());
 ```
 
-4. `uploadFile`（行 494）与 `processUploadedFiles` 接线：`ToolService.processUploadedFiles` 内目前用 `scriptRunner.run(pythonCmd, scriptPath, allDataFiles)`（行 385 `runScriptTemplate`）。改为按 `tool.getRuntime()` 分发：
+4. `uploadFile`（行 494）与 `processUploadedFiles` 接线：`ToolService.processUploadedFiles` 内目前用 `scriptRunner.run(pythonCmd, scriptPath, allDataFiles)`（行 385 `runScriptTemplate`）。按 Task 5 修正签名，**python 走 venv 能力路径、node/java 走 `runBy` 分发**（不得把 runtime 字符串当 `run(String,...)` 第一参传，会误路由 venv 绝对路径）。在调用点（行 332-346）按 `tool.getRuntime()` 分支：
 
 ```java
-    private String runScriptTemplate(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
+    private String runScriptTemplatePython(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles)
             throws IOException, InterruptedException {
-        ScriptRunResult r = scriptRunner.run(runtime, scriptFile, dataFiles);
-        if (!r.isPythonFound()) return "错误: 运行时不可用或未安装 (runtime=" + (runtime == null ? "python" : runtime) + ")";
+        ScriptRunResult r = scriptRunner.run(interpreter, scriptFile, dataFiles);
+        if (!r.isPythonFound()) return "错误: 服务端未安装Python或Python未添加到环境变量";
+        return toResultText(r, "python");
+    }
+
+    private String runScriptTemplateByRuntime(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
+            throws IOException, InterruptedException {
+        ScriptRunResult r = scriptRunner.runBy(runtime, scriptFile, dataFiles);
+        if (!r.isPythonFound()) return "错误: 对应运行时未安装 (runtime=" + r.getRuntime() + ")";
+        return toResultText(r, runtime);
+    }
+
+    private String toResultText(ScriptRunResult r, String runtime) {
         if (r.isTimedOut()) return "执行超时 (超过" + ("java".equals(runtime) ? 180 : 120) + "秒)\n" + r.getOutput();
         if (r.getExitCode() != 0) return "执行错误 (Exit code: " + r.getExitCode() + ")\n" + r.getOutput();
         return r.getOutput();
     }
 ```
 
-`runScriptTemplate` 当前签名是 `(String pythonCmd, Path scriptFile, Map...)`，把首个参数语义改为 runtime，并在 `processUploadedFiles` 两处调用（行 338/346）传 `tool.getRuntime()`。注意：包模式用 venv python 的旧逻辑（行 336-338 用 `resolveVenvPython(toolId)` 作为 `py` 变量传给 `runScriptTemplate(py, ...)`）——python 包仍走 venv；重构后 python 的 `scriptRunner.run` 对 `pythonCmd` 语义需保留（见 Task 5 的旧签名兼容，`run("python",...)` 内部用系统 python；venv 场景改由调用方显式传 venv python 命令给 `run(String pythonCmd, ...)` 兼容路径）。实现时确保 python 包模式 venv 行为不回归。
+调用点分支：`"node"`/`"java"`（或非 python）→ `runScriptTemplateByRuntime(tool.getRuntime(), scriptPath, allDataFiles)`；`"python"`/null → 保留原 venv 解析（行 336-338 `resolveVenvPython` → `py`）→ `runScriptTemplatePython(py, scriptPath, allDataFiles)`。确保 python 包模式 venv 行为不回归。
 
 5. 创建/更新调用 `scriptPackageService.install(...)` 处（行 284/404）传 `tool.getRuntime()` 给 3 参重载（若已设 runtime；未设则为 python）。
 
@@ -855,7 +872,7 @@ class RuntimeSmokeTest {
 
     private ScriptRunnerService newSvc() {
         return new ScriptRunnerService(new CommandResolver(),
-                List.of(new PythonRunner(new CommandResolver()),
+                List.of(new PythonRunner(),
                         new NodeRunner(new CommandResolver()),
                         new JavaRunner(new CommandResolver())));
     }
@@ -872,7 +889,7 @@ class RuntimeSmokeTest {
                 "console.log(\"ENVDIR=\"+(process.env.DATA_DIR||\"\"));");
         Map<String, byte[]> data = new LinkedHashMap<>();
         data.put("hello.txt", "hi-node".getBytes());
-        ScriptRunnerService.ScriptRunResult r = newSvc().run("node", script, data);
+        ScriptRunnerService.ScriptRunResult r = newSvc().runBy("node", script, data);
         if (r.isPythonFound()) {  // runtime found
             assertEquals(0, r.getExitCode());
             assertTrue(r.getOutput().contains("ARGVDIR="));
