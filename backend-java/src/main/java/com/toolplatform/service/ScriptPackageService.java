@@ -59,6 +59,8 @@ public class ScriptPackageService {
     public static String[] entryCandidatesFor(String runtime) {
         if ("java".equals(runtime)) return new String[]{"app.jar", "main.jar", "run.jar"};
         if ("node".equals(runtime)) return new String[]{"main.js", "app.js", "run.js", "index.js"};
+        if ("bash".equals(runtime)) return new String[]{"main.sh", "app.sh", "run.sh", "index.sh"};
+        if ("bat".equals(runtime)) return new String[]{"main.bat", "app.bat", "run.bat"};
         return new String[]{"main.py", "app.py", "run.py"};
     }
 
@@ -266,6 +268,8 @@ public class ScriptPackageService {
         String lower = name.toLowerCase();
         if ("java".equals(runtime)) return lower.endsWith(".jar");
         if ("node".equals(runtime)) return lower.endsWith(".js") || lower.endsWith(".mjs");
+        if ("bash".equals(runtime)) return lower.endsWith(".sh") || lower.endsWith(".bash");
+        if ("bat".equals(runtime)) return lower.endsWith(".bat") || lower.endsWith(".cmd");
         return lower.endsWith(".py");
     }
 
@@ -273,6 +277,7 @@ public class ScriptPackageService {
         int dot = fileName.lastIndexOf('.');
         String ext = dot >= 0 ? fileName.substring(dot + 1).toLowerCase() : "";
         if ("jar".equals(ext) && "java".equals(runtime)) return;
+        if (("bat".equals(ext) || "cmd".equals(ext)) && "bat".equals(runtime)) return;
         if (BLOCKED_EXT.contains(ext)) {
             throw new PackageInstallException("不允许的可执行文件: " + fileName);
         }
