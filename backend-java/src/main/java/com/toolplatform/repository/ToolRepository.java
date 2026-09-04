@@ -11,6 +11,7 @@ import java.util.List;
 public interface ToolRepository extends JpaRepository<Tool, Long> {
     List<Tool> findByStatus(String status);
     List<Tool> findByCategoryAndStatus(String category, String status);
+    long countByCategoryAndStatus(String category, String status);
     List<Tool> findByAuthorId(Long authorId);
 
     @Query("select t from Tool t where t.authorId = :authorId and (lower(t.name) like lower(concat('%', :kw, '%')) or lower(t.description) like lower(concat('%', :kw, '%')))")

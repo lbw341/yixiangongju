@@ -50,6 +50,9 @@
               <button v-if="tool.formatTemplate" @click="downloadTemplate('format')" class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2">
                 <i class="fas fa-download"></i> 下载格式模板
               </button>
+              <button v-if="tool.formatTemplate" @click="previewTemplate()" class="w-full sm:w-auto bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 font-semibold py-3 px-4 rounded-lg border border-amber-200 shadow-sm hover:shadow-md hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 hover:-translate-y-0.5 transition-all inline-flex items-center justify-center gap-2">
+                <i class="fas fa-eye"></i> 预览数据格式要求
+              </button>
               <label class="w-full sm:w-auto bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition inline-flex items-center justify-center gap-2 cursor-pointer">
                 <i class="fas fa-upload"></i> 选择文件（支持压缩包）
                 <input type="file" class="sr-only" @change="onFilesPicked" accept=".xlsx,.csv,.json,.zip,.py,.sh,.txt,.xls,.md,.log" multiple>
@@ -173,6 +176,51 @@
   <div v-else-if="error" class="text-red-500">加载失败: {{ error }}</div>
     <div v-else class="text-gray-500">加载中...</div>
   </div>
+
+  <!-- 模板预览 Modal -->
+  <div v-if="templatePreview.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="templatePreview.open = false">
+    <div class="bg-white rounded-lg shadow-xl w-[90vw] max-w-4xl max-h-[85vh] flex flex-col">
+      <div class="px-6 py-4 border-b flex justify-between items-center">
+        <div>
+          <h3 class="text-lg font-bold">
+            <i class="fas fa-eye text-indigo-500 mr-2"></i>
+            数据格式要求预览
+          </h3>
+          <p class="text-xs text-gray-500 mt-1">
+            {{ templatePreview.filename || '' }}
+            <span v-if="templatePreview.size" class="ml-2 text-gray-400">{{ (templatePreview.size / 1024).toFixed(1) }} KB</span>
+          </p>
+        </div>
+        <button @click="templatePreview.open = false" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="flex-1 overflow-auto p-6">
+        <!-- Excel / CSV / 文本 格式模板预览 -->
+        <div v-if="templatePreview.type === 'html'" class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div class="px-4 py-2 bg-emerald-50 border-b border-gray-200 flex items-center gap-2">
+            <i class="fas fa-table text-emerald-600"></i>
+            <span class="text-sm font-semibold text-emerald-800">您需要准备的数据格式（参考表头列名）</span>
+            <span class="text-xs text-emerald-600 ml-1">· 前 50 行预览</span>
+          </div>
+          <div class="excel-wrap">
+            <table class="excel-table" v-html="templatePreview.content"></table>
+          </div>
+        </div>
+        <pre v-else-if="templatePreview.type === 'text'" class="bg-gray-50 text-gray-700 font-mono text-sm p-4 rounded-lg whitespace-pre-wrap max-h-[65vh] overflow-y-auto leading-relaxed border border-gray-200">{{ templatePreview.content }}</pre>
+        <!-- 图片 -->
+        <div v-else-if="templatePreview.type === 'image'" class="flex justify-center">
+          <img :src="templatePreview.content" class="max-h-[65vh] border rounded shadow" alt="preview">
+        </div>
+        <!-- 二进制提示 -->
+        <div v-else class="text-center py-16">
+          <i class="fas fa-file text-6xl text-gray-300 mb-4"></i>
+          <p class="text-gray-500">{{ templatePreview.message || '该类型文件建议下载查看' }}</p>
+          <button @click="downloadTemplate('format')" class="mt-4 bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-600 transition">
+            <i class="fas fa-download mr-2"></i>下载格式模板
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -204,6 +252,8 @@ const uploadProgress = ref({ visible: false, percent: 0, text: '', success: true
 const uploadResult = ref({ visible: false })
 const pendingFiles = ref([])
 const running = ref(false)
+
+const templatePreview = ref({ open: false, type: '', content: '', filename: '', language: '', size: 0, message: '', kind: 'template' })
 
 const typeColor = computed(() => getToolTypeColors()[tool.value?.type] || 'bg-gray-100 text-gray-800')
 const keywords = computed(() => (tool.value?.keywords || '').split(',').filter(k => k.trim()).map(k => k.trim()))
@@ -346,6 +396,27 @@ async function downloadTemplate(kind) {
   } catch (e) { showToast(e.message, 'error') }
 }
 
+async function previewTemplate() {
+  if (!userStore.token) return showToast('请先登录', 'error')
+  try {
+    const res = await fetch(`/api/tools/${toolId.value}/preview_format_template`, {
+      headers: { 'Authorization': `Bearer ${userStore.token}` }
+    })
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error) }
+    const data = await res.json()
+    templatePreview.value = {
+      open: true,
+      type: data.type || 'text',
+      content: data.content || '',
+      filename: data.filename || '',
+      language: data.language || '',
+      size: data.size || 0,
+      message: data.message || '',
+      kind: 'format'
+    }
+  } catch (e) { showToast(e.message, 'error') }
+}
+
 async function previewResult() {
   if (!currentResultFile.value) return showToast('请先生成周报', 'error')
   try {
@@ -389,3 +460,46 @@ function formatTime(dt) {
 onMounted(loadTool)
 watch(() => route.params.id, loadTool)
 </script>
+
+<style scoped>
+.excel-wrap {
+  max-height: 55vh;
+  overflow: auto;
+}
+.excel-wrap table.excel-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  font-family: -apple-system, Segoe UI, "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-width: 100%;
+}
+.excel-wrap table.excel-table th,
+.excel-wrap table.excel-table td {
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 6px 12px;
+  white-space: nowrap;
+  min-width: 90px;
+  color: #374151;
+}
+.excel-wrap table.excel-table thead th {
+  background: #f1f5f9;
+  font-weight: 700;
+  color: #1e293b;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-top: 1px solid #cbd5e1;
+  text-align: left;
+}
+.excel-wrap table.excel-table tbody tr:nth-child(even) td {
+  background: #fafbfc;
+}
+.excel-wrap table.excel-table tbody tr:hover td {
+  background: #fff7ed;
+}
+.excel-wrap table.excel-table td:first-child,
+.excel-wrap table.excel-table th:first-child {
+  border-left: 1px solid #cbd5e1;
+}
+</style>

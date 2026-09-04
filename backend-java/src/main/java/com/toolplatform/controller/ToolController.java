@@ -161,6 +161,64 @@ public class ToolController extends BaseController {
                 .body(resource);
     }
 
+    @GetMapping("/{id}/preview_template")
+    public ResponseEntity<?> previewTemplate(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        var tool = toolRepo.findById(id);
+        if (tool.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
+        Tool t = tool.get();
+
+        if (t.getPackageDir() != null && !t.getPackageDir().isEmpty()) {
+            return ResponseEntity.ok(Map.of(
+                    "type", "binary",
+                    "filename", t.getName() + ".zip",
+                    "message", "该工具模板是 zip 压缩包，请点击「下载脚本模板（压缩包）」查看"
+            ));
+        }
+        if (t.getTemplateFile() == null || t.getTemplateFile().isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "该工具没有模板文件"));
+        }
+
+        Path filePath = toolService.getTemplatePath(t.getTemplateFile());
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.status(404).body(Map.of("error", "模板文件不存在"));
+        }
+
+        try {
+            Map<String, Object> preview = toolService.previewTemplate(filePath);
+            return ResponseEntity.ok(preview);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "预览失败: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/preview_format_template")
+    public ResponseEntity<?> previewFormatTemplate(@PathVariable Long id, HttpServletRequest request) {
+        User u = getCurrentUser(request);
+        if (u == null) return ResponseEntity.status(401).body(Map.of("error", "未登录"));
+
+        var tool = toolRepo.findById(id);
+        if (tool.isEmpty()) return ResponseEntity.status(404).body(Map.of("error", "工具不存在"));
+        Tool t = tool.get();
+        if (t.getFormatTemplate() == null || t.getFormatTemplate().isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "该工具没有格式模板"));
+        }
+
+        Path filePath = toolService.getTemplatePath(t.getFormatTemplate());
+        if (!Files.exists(filePath)) {
+            return ResponseEntity.status(404).body(Map.of("error", "格式模板文件不存在"));
+        }
+
+        try {
+            Map<String, Object> preview = toolService.previewTemplate(filePath);
+            return ResponseEntity.ok(preview);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "预览失败: " + e.getMessage()));
+        }
+    }
+
     @GetMapping("/{id}/download_format_template")
     public ResponseEntity<?> downloadFormatTemplate(@PathVariable Long id, HttpServletRequest request) {
         User u = getCurrentUser(request);

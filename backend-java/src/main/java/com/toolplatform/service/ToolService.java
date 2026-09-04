@@ -519,6 +519,81 @@ public class ToolService {
         return Paths.get(templateDir, templateFile);
     }
 
+    /**
+     * 预览模板文件内容：按扩展名分类返回 JSON。
+     * 文本类 → content 字段（UTF-8 字符串）；
+     * Excel 类 → content 字段（HTML 表格片段）；
+     * 其他二进制 → 抛异常让前端提示"建议下载查看"。
+     */
+    public Map<String, Object> previewTemplate(Path filePath) throws IOException {
+        String name = filePath.getFileName().toString();
+        String ext = extOf(name);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("filename", name);
+        result.put("extension", ext);
+        result.put("size", Files.size(filePath));
+
+        if (Set.of("xlsx", "xls").contains(ext)) {
+            String html = excelToHtmlTable(filePath);
+            result.put("type", "html");
+            result.put("content", html);
+        } else if (Set.of("png", "jpg", "jpeg", "gif", "svg", "webp").contains(ext)) {
+            result.put("type", "binary");
+            result.put("content", "");
+            result.put("message", "图片类型，建议下载查看");
+        } else if (Set.of("docx", "pdf", "pptx", "zip", "rar", "7z", "jar").contains(ext)) {
+            result.put("type", "binary");
+            result.put("content", "");
+            result.put("message", "该类型为二进制文件，请点击「下载模板」查看");
+        } else {
+            // 全部按 UTF-8 文本处理
+            String content = Files.readString(filePath, StandardCharsets.UTF_8);
+            result.put("type", "text");
+            result.put("content", content);
+            // 推断语言
+            String lang = ext;
+            Map<String, String> langMap = new LinkedHashMap<>();
+            langMap.put("py", "python"); langMap.put("sh", "bash"); langMap.put("js", "javascript");
+            langMap.put("ts", "typescript"); langMap.put("java", "java"); langMap.put("go", "go");
+            langMap.put("c", "c"); langMap.put("cpp", "cpp"); langMap.put("css", "css");
+            langMap.put("html", "html"); langMap.put("json", "json"); langMap.put("yaml", "yaml");
+            langMap.put("yml", "yaml"); langMap.put("md", "markdown"); langMap.put("xml", "xml");
+            langMap.put("sql", "sql"); langMap.put("txt", "text"); langMap.put("csv", "text");
+            result.put("language", langMap.getOrDefault(lang, lang));
+        }
+        return result;
+    }
+
+    /**
+     * 把 Excel 第一个工作表转成 HTML <table> 片段（不含 <html>/<body>，方便嵌入前端 Modal）。
+     */
+    private String excelToHtmlTable(Path filePath) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<div class=\"excel-preview\">");
+        sb.append("<table class=\"excel-table\" border=\"1\" cellspacing=\"0\" cellpadding=\"4\">");
+        boolean isFirst = true;
+        try (WorkbookWrapper ww = new WorkbookWrapper(Files.newInputStream(filePath), filePath.toString().toLowerCase().endsWith(".xlsx"))) {
+            for (RowWrapper row : ww.getRows()) {
+                List<String> cells = row.getValues();
+                sb.append("<tr>");
+                for (String val : cells) {
+                    sb.append(isFirst ? "<th>" : "<td>");
+                    sb.append(escapeHtml(val == null ? "" : val));
+                    sb.append(isFirst ? "</th>" : "</td>");
+                }
+                sb.append("</tr>");
+                isFirst = false;
+            }
+        }
+        sb.append("</table></div>");
+        return sb.toString();
+    }
+
+    private static String escapeHtml(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
     private static String extOf(String name) {
         int dot = name.lastIndexOf('.');
         return dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";

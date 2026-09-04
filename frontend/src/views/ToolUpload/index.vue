@@ -33,11 +33,8 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
           <select v-model="form.category" required class="w-full border border-gray-300 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="规划">规划</option>
-            <option value="建设">建设</option>
-            <option value="优化">优化</option>
-            <option value="维护">维护</option>
-            <option value="客服">客服</option>
+            <option v-for="c in categories" :key="c.id" :value="c.name">{{ c.name }}</option>
+            <option v-if="categories.length === 0" disabled>加载分类中...</option>
           </select>
         </div>
         <div v-if="form.type === 'python'">
@@ -85,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { request } from '../../api/request'
 import { useToast } from '../../composables/useToast'
@@ -93,8 +90,10 @@ import { useToast } from '../../composables/useToast'
 const router = useRouter()
 const { showToast } = useToast()
 
+const categories = ref([])
+
 const form = reactive({
-  name: '', type: 'python', runtime: 'python', category: '规划', description: '', instructions: ''
+  name: '', type: 'python', runtime: 'python', category: '', description: '', instructions: ''
 })
 const BLOCKED_EXT = ['exe', 'dll', 'bat', 'cmd', 'ps1', 'msi', 'scr', 'com', 'jar']
 const SCRIPT_ACCEPT = {
@@ -163,14 +162,24 @@ async function handleUpload() {
 
     await request('/api/tools', { method: 'POST', body: fd })
     showToast('工具上传成功')
-    Object.assign(form, { name: '', type: 'python', category: '规划', description: '', instructions: '' })
+    Object.assign(form, { name: '', type: 'python', category: categories.value[0]?.name || '', description: '', instructions: '' })
     scriptFiles.value = []
     formatFile.value = null
     router.push('/manage')
   } catch (e) {
     showToast(e.message, 'error')
-  } finally {
-    uploading.value = false
   }
 }
+
+onMounted(async () => {
+  try {
+    const resp = await request('/api/categories')
+    categories.value = resp.categories || []
+    if (!form.category && categories.value.length > 0) {
+      form.category = categories.value[0].name
+    }
+  } catch (e) {
+    // 分类加载失败不阻塞表单
+  }
+})
 </script>

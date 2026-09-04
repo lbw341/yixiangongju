@@ -4,22 +4,20 @@
     <h1 class="text-3xl font-bold mb-2">欢迎回来！{{ greetingName }}</h1>
     <p class="text-gray-500 mb-8">开始新的一天，让高效工具助您一臂之力。</p>
 
-    <!-- 分类统计卡片 -->
+    <!-- 分类统计卡片（从 /api/categories 动态加载） -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-8">
-      <div v-for="(stats, name) in categoriesData" :key="name" class="stat-card bg-white p-6 rounded-lg shadow-md transition-all">
+      <div v-for="cat in categories" :key="cat.id"
+           class="stat-card bg-white p-6 rounded-lg shadow-md transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+           @click="router.push(`/category/${encodeURIComponent(cat.name)}`)">
         <div class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 mb-3">
-          <i :class="['fas', getCategoryIcons()[name], 'text-xl', getCategoryColors()[name]]"></i>
+          <i :class="['fas', cat.icon || 'fas fa-toolbox', 'text-xl', colorClass(cat.color)]"></i>
         </div>
-        <h3 class="text-gray-500 text-sm font-medium">{{ name }}类工具总数</h3>
-        <p class="text-3xl font-bold mt-2">{{ stats.count }}</p>
+        <h3 class="text-gray-500 text-sm font-medium">{{ cat.name }}类工具总数</h3>
+        <p class="text-3xl font-bold mt-2">{{ catStats[cat.name]?.count ?? 0 }}</p>
         <div class="mt-4 space-y-2">
           <div class="flex justify-between items-center">
             <span class="text-xs text-gray-500">今日下载/调用</span>
-            <span class="text-sm font-medium">{{ stats.downloads + stats.calls }}</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-xs text-gray-500">累计下载/调用</span>
-            <span class="text-sm font-medium">{{ stats.downloads + stats.calls }}</span>
+            <span class="text-sm font-medium">{{ (catStats[cat.name]?.downloads ?? 0) + (catStats[cat.name]?.calls ?? 0) }}</span>
           </div>
         </div>
       </div>
@@ -85,7 +83,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../../store/modules/user'
 import { request } from '../../api/request'
-import { getCategoryIcons, getCategoryColors } from '../../composables/useToast'
 import ToolCard from '../../components/ToolCard/index.vue'
 import { useRouter } from 'vue-router'
 
@@ -96,14 +93,23 @@ const loading = ref(false)
 const error = ref('')
 const dashboard = ref({})
 const usageData = ref({ tools: [] })
+const categories = ref([])
 
-const categoriesData = computed(() => {
-  const result = {}
-  ;['规划', '建设', '优化', '维护', '客服'].forEach(name => {
-    result[name] = dashboard.value.categories?.[name] || { count: 0, downloads: 0, calls: 0 }
-  })
-  return result
-})
+// Tailwind color 映射
+const COLOR_MAP = {
+  indigo: 'text-indigo-500',
+  emerald: 'text-emerald-500',
+  amber: 'text-amber-500',
+  sky: 'text-sky-500',
+  rose: 'text-rose-500',
+  violet: 'text-violet-500',
+  teal: 'text-teal-500',
+  orange: 'text-orange-500',
+  gray: 'text-gray-500'
+}
+function colorClass(c) { return COLOR_MAP[c] || COLOR_MAP.indigo }
+
+const catStats = computed(() => dashboard.value.categories || {})
 
 const recentTools = computed(() => (usageData.value.tools || []).slice(0, 4))
 const hotTools = computed(() => (dashboard.value.hot_tools || []).slice(0, 5))
@@ -117,12 +123,14 @@ function goDetail(id) {
 onMounted(async () => {
   try {
     loading.value = true
-    const [dash, usage] = await Promise.all([
+    const [dash, usage, catsResp] = await Promise.all([
       request('/api/stats/dashboard'),
-      request('/api/stats/recent_usage').catch(() => ({ tools: [] }))
+      request('/api/stats/recent_usage').catch(() => ({ tools: [] })),
+      request('/api/categories').catch(() => ({ categories: [] }))
     ])
     dashboard.value = dash
     usageData.value = usage
+    categories.value = catsResp.categories || []
   } catch (e) {
     error.value = e.message
   } finally {

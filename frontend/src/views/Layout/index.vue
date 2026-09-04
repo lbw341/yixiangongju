@@ -99,6 +99,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../store/modules/user'
+import { request } from '../../api/request'
 import ToastContainer from '../../components/Toast/index.vue'
 
 const route = useRoute()
@@ -108,6 +109,7 @@ const userStore = useUserStore()
 const isCollapsed = ref(false)
 const unreadCount = ref(0)
 const expandedMenus = reactive({})
+const categories = ref([])
 
 function isExpanded(key) { return !!expandedMenus[key] }
 function toggleExpand(key) { expandedMenus[key] = !expandedMenus[key] }
@@ -123,13 +125,11 @@ const menuItems = computed(() => [
     path: '/tools',
     title: '全部工具',
     icon: 'fas fa-tools',
-    children: [
-      { path: '/category/规划', title: '规划类', icon: 'fas fa-project-diagram' },
-      { path: '/category/建设', title: '建设类', icon: 'fas fa-hammer' },
-      { path: '/category/优化', title: '优化类', icon: 'fas fa-chart-line' },
-      { path: '/category/维护', title: '维护类', icon: 'fas fa-wrench' },
-      { path: '/category/客服', title: '客服类', icon: 'fas fa-cogs' }
-    ]
+    children: categories.value.map(cat => ({
+      path: `/category/${encodeURIComponent(cat.name)}`,
+      title: cat.name + '类',
+      icon: cat.icon || 'fas fa-folder'
+    }))
   },
   { path: '/manage', title: '工具管理', icon: 'fas fa-upload', requiresAuthor: true },
   { path: '/messages', title: '消息中心', icon: 'fas fa-envelope', badge: unreadCount.value > 0 ? unreadCount.value : null },
@@ -169,5 +169,8 @@ async function loadUnreadCount() {
 
 onMounted(() => {
   loadUnreadCount()
+  request('/api/categories').then(r => {
+    categories.value = r.categories || []
+  }).catch(() => {})
 })
 </script>

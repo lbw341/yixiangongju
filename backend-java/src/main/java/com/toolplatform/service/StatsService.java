@@ -1,8 +1,10 @@
 package com.toolplatform.service;
 
+import com.toolplatform.entity.Category;
 import com.toolplatform.entity.DownloadStat;
 import com.toolplatform.entity.Tool;
 import com.toolplatform.entity.UserToolUsage;
+import com.toolplatform.repository.CategoryRepository;
 import com.toolplatform.repository.DownloadStatRepository;
 import com.toolplatform.repository.ToolRepository;
 import com.toolplatform.repository.UserToolUsageRepository;
@@ -23,24 +25,28 @@ public class StatsService {
     private final ToolRepository toolRepo;
     private final DownloadStatRepository statRepo;
     private final UserToolUsageRepository usageRepo;
+    private final CategoryRepository categoryRepo;
 
-    public StatsService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo) {
+    public StatsService(ToolRepository toolRepo, DownloadStatRepository statRepo,
+                        UserToolUsageRepository usageRepo, CategoryRepository categoryRepo) {
         this.toolRepo = toolRepo;
         this.statRepo = statRepo;
         this.usageRepo = usageRepo;
+        this.categoryRepo = categoryRepo;
     }
 
     /**
      * 获取仪表盘数据
      */
     public Map<String, Object> getDashboard() {
-        String[] categories = {"规划", "建设", "维护", "优化", "客服"};
+        // 从 category 表动态查询分类，不再硬编码
+        List<Category> cats = categoryRepo.findAllByOrderBySortOrderAsc();
         Map<String, Object> catStats = new LinkedHashMap<>();
-        for (String cat : categories) {
-            var tools = toolRepo.findByCategoryAndStatus(cat, "online");
+        for (Category c : cats) {
+            var tools = toolRepo.findByCategoryAndStatus(c.getName(), "online");
             int downloads = tools.stream().mapToInt(Tool::getDownloads).sum();
             int calls = tools.stream().mapToInt(Tool::getCalls).sum();
-            catStats.put(cat, Map.of("count", tools.size(), "downloads", downloads, "calls", calls));
+            catStats.put(c.getName(), Map.of("count", tools.size(), "downloads", downloads, "calls", calls));
         }
 
         var hotTools = toolRepo.findByStatus("online").stream()
