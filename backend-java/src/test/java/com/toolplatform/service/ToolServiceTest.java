@@ -1,14 +1,26 @@
 package com.toolplatform.service;
 
+import com.toolplatform.entity.Tool;
+import com.toolplatform.sandbox.SandboxExecutionService;
 import com.toolplatform.service.ToolService.ZipExtractResult;
+import com.toolplatform.service.ToolService.FileProcessResult;
+import com.toolplatform.service.ScriptRunnerService.ScriptRunResult;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Example;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -17,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ToolServiceTest {
 
     private ToolService newService() {
-        return new ToolService(null, null, null, null, null);
+        return new ToolService(null, null, null, null, null, null, false);
     }
 
     private void put(ZipOutputStream zos, String name, byte[] bytes) throws Exception {
@@ -104,5 +116,155 @@ class ToolServiceTest {
         Path p = Files.createTempFile("fmt", ".txt");
         Files.writeString(p, text, StandardCharsets.UTF_8);
         return p;
+    }
+
+    // --- Sandbox integration tests ---
+
+    private Tool makeTool(long id, Path scriptPath) {
+        Tool t = new Tool();
+        t.setId(id);
+        t.setPackageDir("pkg-" + id);
+        t.setEntryFile(scriptPath.getFileName().toString());
+        t.setRuntime(null);
+        return t;
+    }
+
+    private com.toolplatform.repository.ToolRepository stubToolRepo(Tool tool) {
+        return new com.toolplatform.repository.ToolRepository() {
+            public Optional<Tool> findById(Long id) {
+                return Optional.ofNullable(id != null && id.equals(tool.getId()) ? tool : null);
+            }
+            public <S extends Tool> S save(S entity) { return entity; }
+            public <S extends Tool> S saveAndFlush(S entity) { return entity; }
+            public <S extends Tool> List<S> saveAllAndFlush(Iterable<S> entities) {
+                List<S> out = new ArrayList<>();
+                entities.forEach(out::add);
+                return out;
+            }
+            public <S extends Tool> List<S> saveAll(Iterable<S> entities) {
+                List<S> out = new ArrayList<>();
+                entities.forEach(out::add);
+                return out;
+            }
+            public boolean existsById(Long id) { return false; }
+            public List<Tool> findAll() { return List.of(); }
+            public List<Tool> findAllById(Iterable<Long> ids) { return List.of(); }
+            public long count() { return 0; }
+            public void deleteById(Long id) {}
+            public void delete(Tool entity) {}
+            public void deleteAllById(Iterable<? extends Long> ids) {}
+            public void deleteAll() {}
+            public void deleteAllByIdInBatch(Iterable<Long> ids) {}
+            public void deleteInBatch(Iterable<Tool> entities) {}
+            public void deleteAll(Iterable<? extends Tool> entities) {}
+            public Page<Tool> findAll(Pageable pageable) { return Page.empty(); }
+            public <S extends Tool> List<S> findAll(Example<S> example) { return List.of(); }
+            public <S extends Tool> List<S> findAll(Example<S> example, Sort sort) { return List.of(); }
+            public <S extends Tool> Page<S> findAll(Example<S> example, Pageable pageable) { return Page.empty(); }
+            public <S extends Tool> long count(Example<S> example) { return 0; }
+            public <S extends Tool> boolean exists(Example<S> example) { return false; }
+            public Tool getReferenceById(Long id) { return tool; }
+            public Tool getById(Long id) { return tool; }
+            public Tool getOne(Long id) { return tool; }
+            public List<Tool> findByStatus(String s) { return List.of(); }
+            public List<Tool> findByCategoryAndStatus(String c, String s) { return List.of(); }
+            public long countByCategoryAndStatus(String c, String s) { return 0; }
+            public List<Tool> findByAuthorId(Long a) { return List.of(); }
+            public Page<Tool> searchMy(Long a, String kw, Pageable p) { return Page.empty(); }
+            public List<Tool> searchTools(String q) { return List.of(); }
+            public List<Tool> searchByCategory(String c, String q) { return List.of(); }
+            public List<Tool> findAll(Sort s) { return List.of(); }
+            public void flush() {}
+            public void deleteAllInBatch() {}
+            public void deleteAllInBatch(Iterable<Tool> es) {}
+            public <S extends Tool> Optional<S> findOne(Example<S> e) { return Optional.empty(); }
+            public <S extends Tool> long delete(Example<S> e) { return 0; }
+            public <S extends Tool> long deleteAll(Example<S> e) { return 0; }
+            public <S extends Tool, R> R findBy(Example<S> e, java.util.function.Function<org.springframework.data.repository.query.FluentQuery.FetchableFluentQuery<S>, R> q) { return null; }
+        };
+    }
+
+    /** 反射写入宿主 @Value 字段，供直接 new ToolService（不经 Spring）的测试用 */
+    private static void setField(Object target, String name, Object value) throws Exception {
+        java.lang.reflect.Field f = ToolService.class.getDeclaredField(name);
+        f.setAccessible(true);
+        f.set(target, value);
+    }
+
+    /** updateCallStats 会读 statRepo，用 mock 返回空 Optional 即可 */
+    private com.toolplatform.repository.DownloadStatRepository stubStatRepo() {
+        return org.mockito.Mockito.mock(com.toolplatform.repository.DownloadStatRepository.class);
+    }
+
+    @Test
+    void sandboxEnabled_delegatesToSandboxExecution() throws Exception {
+        String expected = "sandbox-output";
+        SandboxExecutionService fakeSandbox = new SandboxExecutionService(
+                null, true, "256m", "1", 120L, "img:latest", "1000:1000", "/launcher") {
+            @Override
+            public ScriptRunResult run(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles) {
+                return ScriptRunResult.of(0, expected, "python");
+            }
+        };
+
+        Path tmpDir = Files.createTempDirectory("test_pkg");
+        Path script = tmpDir.resolve("main.py");
+        Files.writeString(script, "print(1)", StandardCharsets.UTF_8);
+
+        ScriptPackageService pkg = new ScriptPackageService(null) {
+            @Override public Path resolvePayload(Long toolId) { return tmpDir; }
+            @Override public Path resolveVenvPython(Long toolId) { return tmpDir.resolve("venv_python"); }
+        };
+
+        Tool tool = makeTool(1L, script);
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, null, pkg, fakeSandbox, true);
+        setField(svc, "resultDir", Files.createTempDirectory("results").toString());
+        FileProcessResult result = svc.processUploadedFiles(1L, 1L,
+                new MultipartFile[]{
+                    new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
+                });
+
+        assertTrue(result.isPythonExecuted());
+        assertEquals(expected, result.getPythonOutput());
+    }
+
+    @Test
+    void sandboxDisabled_usesScriptRunner() throws Exception {
+        String expected = "direct-output";
+        SandboxExecutionService fakeSandbox = new SandboxExecutionService(
+                null, false, "256m", "1", 120L, "img:latest", "1000:1000", "/launcher") {
+            @Override
+            public ScriptRunResult run(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles) {
+                fail("sandbox should not be invoked when disabled");
+                return null;
+            }
+        };
+
+        Path tmpDir = Files.createTempDirectory("test_pkg");
+        Path script = tmpDir.resolve("main.py");
+        Files.writeString(script, "print(1)", StandardCharsets.UTF_8);
+
+        ScriptPackageService pkg = new ScriptPackageService(null) {
+            @Override public Path resolvePayload(Long toolId) { return tmpDir; }
+            @Override public Path resolveVenvPython(Long toolId) { return tmpDir.resolve("venv_python"); }
+        };
+
+        com.toolplatform.service.ScriptRunnerService scriptRunner = new com.toolplatform.service.ScriptRunnerService(null, List.of()) {
+            @Override
+            public ScriptRunResult run(String interpreter, Path scriptFile2, Map<String, byte[]> dataFiles2) {
+                return ScriptRunResult.of(0, expected, "python");
+            }
+        };
+
+        Tool tool = makeTool(2L, script);
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, scriptRunner, pkg, fakeSandbox, false);
+        setField(svc, "resultDir", Files.createTempDirectory("results").toString());
+        FileProcessResult result = svc.processUploadedFiles(2L, 1L,
+                new MultipartFile[]{
+                    new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
+                });
+
+        assertTrue(result.isPythonExecuted());
+        assertEquals(expected, result.getPythonOutput());
     }
 }

@@ -2,7 +2,9 @@ package com.toolplatform.service;
 
 import com.toolplatform.entity.*;
 import com.toolplatform.repository.*;
+import com.toolplatform.sandbox.SandboxExecutionService;
 import com.toolplatform.service.ScriptRunnerService.ScriptRunResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,14 +47,26 @@ public class ToolService {
     private final UserToolUsageRepository usageRepo;
     private final ScriptRunnerService scriptRunner;
     private final ScriptPackageService scriptPackageService;
+    private final SandboxExecutionService sandboxExecution;
+    private final boolean sandboxEnabled;
 
     public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
                        ScriptRunnerService scriptRunner, ScriptPackageService scriptPackageService) {
+        this(toolRepo, statRepo, usageRepo, scriptRunner, scriptPackageService, null, false);
+    }
+
+    @Autowired(required = false)
+    public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
+                       ScriptRunnerService scriptRunner, ScriptPackageService scriptPackageService,
+                       SandboxExecutionService sandboxExecution,
+                       @Value("${sandbox.enabled:true}") boolean sandboxEnabled) {
         this.toolRepo = toolRepo;
         this.statRepo = statRepo;
         this.usageRepo = usageRepo;
         this.scriptRunner = scriptRunner;
         this.scriptPackageService = scriptPackageService;
+        this.sandboxExecution = sandboxExecution;
+        this.sandboxEnabled = sandboxEnabled;
     }
 
     /**
@@ -402,14 +416,25 @@ public class ToolService {
 
     private String runScriptTemplatePython(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles)
             throws IOException, InterruptedException {
-        ScriptRunResult r = scriptRunner.run(interpreter, scriptFile, dataFiles);
+        ScriptRunResult r;
+        if (sandboxEnabled && sandboxExecution != null) {
+            // 沙箱只认 runtime 令牌，解释器(.venv)由容器内 launcher 按 runtime 定位
+            r = sandboxExecution.run("python", scriptFile, dataFiles);
+        } else {
+            r = scriptRunner.run(interpreter, scriptFile, dataFiles);
+        }
         if (!r.isPythonFound()) return "错误: 服务端未安装Python或Python未添加到环境变量";
         return toResultText(r, "python");
     }
 
     private String runScriptTemplateByRuntime(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
             throws IOException, InterruptedException {
-        ScriptRunResult r = scriptRunner.runBy(runtime, scriptFile, dataFiles);
+        ScriptRunResult r;
+        if (sandboxEnabled && sandboxExecution != null) {
+            r = sandboxExecution.run(runtime, scriptFile, dataFiles);
+        } else {
+            r = scriptRunner.runBy(runtime, scriptFile, dataFiles);
+        }
         if (!r.isPythonFound()) return "错误: 对应运行时未安装 (runtime=" + r.getRuntime() + ")";
         return toResultText(r, runtime);
     }
