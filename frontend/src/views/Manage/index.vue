@@ -76,6 +76,8 @@
               <option value="python">Python</option>
               <option value="node">Node.js</option>
               <option value="java">Java</option>
+              <option value="bash">Bash</option>
+              <option value="bat">Batch (bat)</option>
             </select>
           </div>
           <div>
