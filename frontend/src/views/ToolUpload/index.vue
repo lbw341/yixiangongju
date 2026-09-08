@@ -31,6 +31,7 @@
             <option value="bash">Bash</option>
             <option value="bat">Batch (bat)</option>
           </select>
+          <p v-if="form.runtime === 'bat'" class="text-xs text-amber-600 mt-1 bg-amber-50 rounded p-2">提醒：bat 为 Windows 专属运行时，在本平台非 root Linux Docker 沙箱中无法执行（仅本地开发回退 sandbox.enabled=false 可用）。如非必要，请考虑上传 bash 版本。</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>

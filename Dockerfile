@@ -22,6 +22,9 @@ RUN apt-get update \
         python3 \
         python3-pip \
         nodejs \
+        iputils-ping \
+        wget \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 沙箱运行用户（SandboxExecutionService 以 --user 1000:1000 启动容器）。

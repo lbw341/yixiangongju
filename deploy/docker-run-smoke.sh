@@ -217,8 +217,8 @@ public class Main {
 }
 JAVASRC
 if docker run --rm --memory 512m \
-    --mount "type=bind,source=$(host_path "$JAVA_BUILD"),target=/build,readonly" \
-    --user 1000:1000 -w /build "$IMAGE" \
+    --mount "type=bind,source=$(host_path "$JAVA_BUILD"),target=/build" \
+    -w /build "$IMAGE" \
     sh -c 'javac Main.java && jar cfe app.jar Main Main.class'; then
     ok "java 冒烟包构建成功（镜像内 javac + jar cfe）"
 else
