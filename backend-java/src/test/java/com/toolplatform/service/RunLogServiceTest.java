@@ -9,17 +9,14 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Example;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.data.jpa.repository.JpaRepository;
 import com.toolplatform.service.RunLogService.PageResult;
 import com.toolplatform.service.RunLogService.RunLogDetail;
 import com.toolplatform.service.RunLogService.RunLogQuery;
@@ -252,14 +249,18 @@ class RunLogServiceTest {
     void getDetail_mapsFullDetailOrNull() {
         RunLogRepository repo = fakeRepo();
         saveLog(repo, 7L, "t", "u", "n", "python", true, 0, false, "SUCCESS", LocalDateTime.now(), "a.csv");
+        // In-memory fake keeps same reference; set output on the saved row
+        repo.findById(7L).ifPresent(r -> r.setOutput("hello output"));
         RunLogService svc = newService(repo);
         RunLogDetail d = svc.getDetail(7L);
         assertNotNull(d);
         assertEquals(7L, d.getId());
+        assertEquals(7L, d.getToolId());
         assertEquals("a.csv", d.getInputFileNames());
         assertEquals(1, d.getInputFileCount());
         // RunLogDetail 扩展了 RunLogSummary
         assertEquals("SUCCESS", d.getStatus());
+        assertEquals("hello output", d.getOutput());
         assertNull(svc.getDetail(99L));
     }
 

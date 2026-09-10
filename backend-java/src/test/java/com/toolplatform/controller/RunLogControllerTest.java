@@ -62,8 +62,10 @@ class RunLogControllerTest {
         u.setId(1L);
         u.setRole("admin");
         RunLogController c = new RunLogController(stubUserRepo(u), stubJwt(), mock(RunLogService.class));
-        assertEquals(400, c.list(null, null, "2026/09/10", null, null, 1, 20,
-                authedRequest()).getStatusCode().value());
+        org.springframework.http.ResponseEntity<?> resp = c.list(null, null, "2026/09/10", null, null, 1, 20,
+                authedRequest());
+        assertEquals(400, resp.getStatusCode().value());
+        assertEquals("日期格式应为 yyyy-MM-dd", ((java.util.Map<?, ?>) resp.getBody()).get("error"));
     }
 
     @Test
