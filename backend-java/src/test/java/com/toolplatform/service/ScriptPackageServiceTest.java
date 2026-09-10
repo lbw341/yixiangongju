@@ -29,6 +29,92 @@ class ScriptPackageServiceTest {
     }
 
     @Test
+    void entryCandidatesContainShForBash() {
+        String[] candidates = ScriptPackageService.entryCandidatesFor("bash");
+        java.util.List<String> list = java.util.Arrays.asList(candidates);
+        assertTrue(list.contains("main.sh"), "bash candidates should contain main.sh");
+        assertTrue(list.contains("app.sh"), "bash candidates should contain app.sh");
+        assertTrue(list.contains("run.sh"), "bash candidates should contain run.sh");
+        assertTrue(list.contains("index.sh"), "bash candidates should contain index.sh");
+        assertEquals(4, candidates.length, "bash should have 4 candidates");
+    }
+
+    @Test
+    void entryCandidatesContainBatForBat() {
+        String[] candidates = ScriptPackageService.entryCandidatesFor("bat");
+        java.util.List<String> list = java.util.Arrays.asList(candidates);
+        assertTrue(list.contains("main.bat"), "bat candidates should contain main.bat");
+        assertTrue(list.contains("app.bat"), "bat candidates should contain app.bat");
+        assertTrue(list.contains("run.bat"), "bat candidates should contain run.bat");
+        assertEquals(3, candidates.length, "bat should have 3 candidates");
+    }
+
+    @Test
+    void entryExtMatchesForBashRuntime() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("entryExtMatches", String.class, String.class);
+        m.setAccessible(true);
+        assertTrue((Boolean) m.invoke(service, "main.sh", "bash"), ".sh should match bash");
+        assertTrue((Boolean) m.invoke(service, "script.BASH", "bash"), ".bash should match bash");
+        assertFalse((Boolean) m.invoke(service, "main.py", "bash"), ".py should not match bash");
+    }
+
+    @Test
+    void entryExtMatchesForBatRuntime() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("entryExtMatches", String.class, String.class);
+        m.setAccessible(true);
+        assertTrue((Boolean) m.invoke(service, "main.bat", "bat"), ".bat should match bat");
+        assertTrue((Boolean) m.invoke(service, "script.CMD", "bat"), ".cmd should match bat");
+        assertFalse((Boolean) m.invoke(service, "main.py", "bat"), ".py should not match bat");
+    }
+
+    @Test
+    void entryExtMatchesExistingRuntimesNotRegressed() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("entryExtMatches", String.class, String.class);
+        m.setAccessible(true);
+        assertTrue((Boolean) m.invoke(service, "main.py", "python"));
+        assertTrue((Boolean) m.invoke(service, "main.js", "node"));
+        assertTrue((Boolean) m.invoke(service, "main.mjs", "node"));
+        assertTrue((Boolean) m.invoke(service, "app.jar", "java"));
+        assertFalse((Boolean) m.invoke(service, "main.sh", "python"));
+        assertFalse((Boolean) m.invoke(service, "main.bat", "python"));
+    }
+
+    @Test
+    void checkBlockedBatAllowedForBatRuntime() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("checkBlocked", String.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, "script.bat", "bat");
+        m.invoke(service, "script.cmd", "bat");
+    }
+
+    @Test
+    void checkBlockedBatStillBlockedForOtherRuntimes() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("checkBlocked", String.class, String.class);
+        m.setAccessible(true);
+        assertThrows(Exception.class, () -> m.invoke(service, "script.bat", "python"));
+        assertThrows(Exception.class, () -> m.invoke(service, "script.bat", "node"));
+        assertThrows(Exception.class, () -> m.invoke(service, "script.bat", "bash"));
+        assertThrows(Exception.class, () -> m.invoke(service, "script.bat", "java"));
+        assertThrows(Exception.class, () -> m.invoke(service, "script.cmd", "python"));
+        assertThrows(Exception.class, () -> m.invoke(service, "script.cmd", "node"));
+    }
+
+    @Test
+    void checkBlockedJarStillAllowedOnlyForJava() throws Exception {
+        ScriptPackageService service = new ScriptPackageService(null);
+        java.lang.reflect.Method m = ScriptPackageService.class.getDeclaredMethod("checkBlocked", String.class, String.class);
+        m.setAccessible(true);
+        m.invoke(service, "app.jar", "java");
+        assertThrows(Exception.class, () -> m.invoke(service, "app.jar", "python"));
+        assertThrows(Exception.class, () -> m.invoke(service, "app.jar", "bat"));
+    }
+
+    @Test
     void copyJarLibsCopiesJarsButNotNonJars() throws Exception {
         Path payload = tempDir.resolve("payload");
         Path libDir = payload.resolve("lib");
