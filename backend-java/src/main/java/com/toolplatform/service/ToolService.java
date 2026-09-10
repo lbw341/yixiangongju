@@ -4,6 +4,8 @@ import com.toolplatform.entity.*;
 import com.toolplatform.repository.*;
 import com.toolplatform.sandbox.SandboxExecutionService;
 import com.toolplatform.service.ScriptRunnerService.ScriptRunResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -50,16 +52,21 @@ public class ToolService {
     private final SandboxExecutionService sandboxExecution;
     private final boolean sandboxEnabled;
 
+    private final RunLogService runLogService;
+
+    private static final Logger log = LoggerFactory.getLogger(ToolService.class);
+
     public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
                        ScriptRunnerService scriptRunner, ScriptPackageService scriptPackageService) {
-        this(toolRepo, statRepo, usageRepo, scriptRunner, scriptPackageService, null, false);
+        this(toolRepo, statRepo, usageRepo, scriptRunner, scriptPackageService, null, false, null);
     }
 
     @Autowired(required = false)
     public ToolService(ToolRepository toolRepo, DownloadStatRepository statRepo, UserToolUsageRepository usageRepo,
                        ScriptRunnerService scriptRunner, ScriptPackageService scriptPackageService,
                        SandboxExecutionService sandboxExecution,
-                       @Value("${sandbox.enabled:true}") boolean sandboxEnabled) {
+                       @Value("${sandbox.enabled:true}") boolean sandboxEnabled,
+                       RunLogService runLogService) {
         this.toolRepo = toolRepo;
         this.statRepo = statRepo;
         this.usageRepo = usageRepo;
@@ -67,6 +74,7 @@ public class ToolService {
         this.scriptPackageService = scriptPackageService;
         this.sandboxExecution = sandboxExecution;
         this.sandboxEnabled = sandboxEnabled;
+        this.runLogService = runLogService;
     }
 
     /**
@@ -278,7 +286,8 @@ public class ToolService {
      * 处理上传的文件
      * 优先执行工具的脚本模板，其次生成通用周报；结果套用格式模板输出
      */
-    public FileProcessResult processUploadedFiles(Long toolId, Long userId, MultipartFile[] files) throws IOException {
+    public FileProcessResult processUploadedFiles(Long toolId, Long userId, String username, String nickname,
+                                                  MultipartFile[] files) throws IOException {
         String timestamp = String.valueOf(System.currentTimeMillis());
         String resultName = "result_" + toolId + "_" + userId + "_" + timestamp + ".txt";
         Path resultPath = Paths.get(resultDir, resultName);
@@ -348,13 +357,16 @@ public class ToolService {
             Path scriptPath = scriptPackageService.resolvePayload(tool.getId()).resolve(tool.getEntryFile());
             try {
                 String runtime = tool.getRuntime();
+                ScriptRunResult result;
                 if (runtime == null || "python".equals(runtime)) {
                     Path venvPy = scriptPackageService.resolveVenvPython(tool.getId());
                     String py = Files.exists(venvPy) ? venvPy.toAbsolutePath().toString() : null;
-                    resultContent = runScriptTemplatePython(py, scriptPath, allDataFiles);
+                    result = runScriptTemplatePython(py, scriptPath, allDataFiles);
                 } else {
-                    resultContent = runScriptTemplateByRuntime(runtime, scriptPath, allDataFiles);
+                    result = runScriptTemplateByRuntime(runtime, scriptPath, allDataFiles);
                 }
+                resultContent = textForResult(result, runtime);
+                recordRunLog(tool, userId, username, nickname, runtime, result, files);
                 scriptExecuted = true;
             } catch (Exception e) {
                 resultContent = "脚本执行失败: " + e.getMessage();
@@ -362,7 +374,9 @@ public class ToolService {
             }
         } else if (scriptFile != null && Files.exists(getTemplatePath(scriptFile))) {
             try {
-                resultContent = runScriptTemplate(null, getTemplatePath(scriptFile), allDataFiles);
+                ScriptRunResult result = runScriptTemplate(null, getTemplatePath(scriptFile), allDataFiles);
+                resultContent = textForResult(result, "python");
+                recordRunLog(tool, userId, username, nickname, "python", result, files);
                 scriptExecuted = true;
             } catch (Exception e) {
                 resultContent = "脚本执行失败: " + e.getMessage();
@@ -396,47 +410,65 @@ public class ToolService {
     }
 
     /**
-     * 运行工具的脚本模板并组装用户可见的结果文本
+     * 运行工具的脚本模板并返回原始运行结果（沙箱/进程级自动选择）
      * 约定: sys.argv[1] 恒为数据目录，sys.argv[2:] 为数据文件列表（可为空）
      * pythonCmd 为 null 时走 ScriptRunnerService 的自动探测
      */
-    private String runScriptTemplate(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles) throws IOException, InterruptedException {
-        ScriptRunResult r = scriptRunner.run(pythonCmd, scriptFile, dataFiles);
-        if (!r.isPythonFound()) {
-            return "错误: 服务端未安装Python或Python未添加到环境变量";
-        }
-        if (r.isTimedOut()) {
-            return "执行超时 (超过120秒)\n" + r.getOutput();
-        }
-        if (r.getExitCode() != 0) {
-            return "执行错误 (Exit code: " + r.getExitCode() + ")\n" + r.getOutput();
-        }
-        return r.getOutput();
+    private ScriptRunResult runScriptTemplate(String pythonCmd, Path scriptFile, Map<String, byte[]> dataFiles)
+            throws IOException, InterruptedException {
+        return scriptRunner.run(pythonCmd, scriptFile, dataFiles);
     }
 
-    private String runScriptTemplatePython(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles)
+    private ScriptRunResult runScriptTemplatePython(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles)
             throws IOException, InterruptedException {
-        ScriptRunResult r;
         if (sandboxEnabled && sandboxExecution != null) {
             // 沙箱只认 runtime 令牌，解释器(.venv)由容器内 launcher 按 runtime 定位
-            r = sandboxExecution.run("python", scriptFile, dataFiles);
-        } else {
-            r = scriptRunner.run(interpreter, scriptFile, dataFiles);
+            return sandboxExecution.run("python", scriptFile, dataFiles);
         }
-        if (!r.isPythonFound()) return "错误: 服务端未安装Python或Python未添加到环境变量";
-        return toResultText(r, "python");
+        return scriptRunner.run(interpreter, scriptFile, dataFiles);
     }
 
-    private String runScriptTemplateByRuntime(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
+    private ScriptRunResult runScriptTemplateByRuntime(String runtime, Path scriptFile, Map<String, byte[]> dataFiles)
             throws IOException, InterruptedException {
-        ScriptRunResult r;
         if (sandboxEnabled && sandboxExecution != null) {
-            r = sandboxExecution.run(runtime, scriptFile, dataFiles);
-        } else {
-            r = scriptRunner.runBy(runtime, scriptFile, dataFiles);
+            return sandboxExecution.run(runtime, scriptFile, dataFiles);
         }
-        if (!r.isPythonFound()) return "错误: 对应运行时未安装 (runtime=" + r.getRuntime() + ")";
-        return toResultText(r, runtime);
+        return scriptRunner.runBy(runtime, scriptFile, dataFiles);
+    }
+
+    /**
+     * 组装用户可见文本（保持既有措辞不变：python 缺失 / 超时 / exit code / 原文）
+     */
+    private String textForResult(ScriptRunResult r, String runtime) {
+        if (!r.isPythonFound()) {
+            return "python".equals(runtime) || runtime == null
+                    ? "错误: 服务端未安装Python或Python未添加到环境变量"
+                    : "错误: 对应运行时未安装 (runtime=" + r.getRuntime() + ")";
+        }
+        return toResultText(r, runtime == null ? "python" : runtime);
+    }
+
+    /**
+     * 埋点：写一条运行日志。任何异常都吞掉，绝不影响本次运行主流程
+     */
+    private void recordRunLog(Tool tool, Long userId, String username, String nickname,
+                              String runtime, ScriptRunResult result, MultipartFile[] files) {
+        try {
+            List<String> fileNames = new ArrayList<>();
+            if (files != null) {
+                for (MultipartFile f : files) {
+                    if (f != null && !f.isEmpty()
+                            && f.getOriginalFilename() != null && !f.getOriginalFilename().isEmpty()) {
+                        fileNames.add(f.getOriginalFilename());
+                    }
+                }
+            }
+            String normalizedRuntime = (runtime == null || runtime.isBlank()) ? "python" : runtime;
+            runLogService.record(tool.getId(), tool.getName(), userId, username, nickname,
+                    normalizedRuntime, sandboxEnabled && sandboxExecution != null, result, fileNames);
+        } catch (Exception e) {
+            log.warn("记录运行日志失败，不影响本次运行", e);
+        }
     }
 
     private String toResultText(ScriptRunResult r, String runtime) {
