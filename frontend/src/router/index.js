@@ -64,6 +64,12 @@ const routes = [
         name: 'Feedback',
         component: () => import('../views/Feedback/index.vue'),
         meta: { title: '反馈与评价' }
+      },
+      {
+        path: 'run-logs',
+        name: 'RunLogs',
+        component: () => import('../views/RunLogs/index.vue'),
+        meta: { title: '运行日志' }
       }
     ]
   }
