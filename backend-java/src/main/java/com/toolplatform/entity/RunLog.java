@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
     @Index(name = "idx_runlog_status", columnList = "status")
 })
 public class RunLog {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "id")
     private Long id;
     @Column(name = "tool_id", nullable = false)
     private Long toolId;
@@ -19,8 +19,11 @@ public class RunLog {
     private String toolName;
     @Column(name = "user_id", nullable = false)
     private Long userId;
+    @Column(name = "username")
     private String username;
+    @Column(name = "nickname")
     private String nickname;
+    @Column(name = "runtime")
     private String runtime;
     @Column(name = "sandbox_used")
     private boolean sandboxUsed;
@@ -28,10 +31,11 @@ public class RunLog {
     private int exitCode;
     @Column(name = "timed_out")
     private boolean timedOut;
+    @Column(name = "status")
     private String status;
     @Column(name = "input_file_names", length = 500)
     private String inputFileNames;
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "output", columnDefinition = "TEXT")
     private String output;
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
