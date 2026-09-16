@@ -14,14 +14,14 @@
             v-if="!item.children"
             :to="item.path"
             :class="['nav-link text-gray-300 hover:bg-gray-700 hover:text-white rounded-lg transition-colors', { 'active bg-indigo-600 text-white': isActive(item.path) }]"
-            v-show="!item.requiresAuthor || userStore.isAuthor"
+            v-show="(!item.requiresAuthor || userStore.isAuthor) && (!item.requiresAdmin || userStore.isAdmin)"
           >
             <i :class="item.icon"></i>
             <span class="nav-text">{{ item.title }}</span>
             <span v-if="item.badge" class="nav-item-extra ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{{ item.badge }}</span>
           </router-link>
 
-          <div v-else v-show="!item.requiresAuthor || userStore.isAuthor">
+          <div v-else v-show="(!item.requiresAuthor || userStore.isAuthor) && (!item.requiresAdmin || userStore.isAdmin)">
             <div :class="['flex items-center rounded-lg transition-colors', { 'bg-indigo-600 text-white': isActive(item.path) }]">
               <router-link
                 :to="item.path"
@@ -132,6 +132,7 @@ const menuItems = computed(() => [
     }))
   },
   { path: '/manage', title: '工具管理', icon: 'fas fa-upload', requiresAuthor: true },
+  { path: '/run-logs', title: '运行日志', icon: 'fas fa-list-alt', requiresAdmin: true },
   { path: '/messages', title: '消息中心', icon: 'fas fa-envelope', badge: unreadCount.value > 0 ? unreadCount.value : null },
   { path: '/feedback', title: '反馈与评价', icon: 'fas fa-comment' },
   { path: '/profile', title: '个人中心', icon: 'fas fa-user' }

@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ToolServiceTest {
 
     private ToolService newService() {
-        return new ToolService(null, null, null, null, null, null, false);
+        return new ToolService(null, null, null, null, null, null, false, null);
     }
 
     private void put(ZipOutputStream zos, String name, byte[] bytes) throws Exception {
@@ -217,9 +217,10 @@ class ToolServiceTest {
         };
 
         Tool tool = makeTool(1L, script);
-        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, null, pkg, fakeSandbox, true);
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, null, pkg, fakeSandbox, true,
+                new RunLogService(org.mockito.Mockito.mock(com.toolplatform.repository.RunLogRepository.class)));
         setField(svc, "resultDir", Files.createTempDirectory("results").toString());
-        FileProcessResult result = svc.processUploadedFiles(1L, 1L,
+        FileProcessResult result = svc.processUploadedFiles(1L, 1L, "zhang", "小张",
                 new MultipartFile[]{
                     new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
                 });
@@ -257,9 +258,109 @@ class ToolServiceTest {
         };
 
         Tool tool = makeTool(2L, script);
-        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, scriptRunner, pkg, fakeSandbox, false);
+        com.toolplatform.repository.RunLogRepository repo =
+                org.mockito.Mockito.mock(com.toolplatform.repository.RunLogRepository.class);
+        org.mockito.Mockito.when(repo.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        RunLogService rls = new RunLogService(repo);
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, scriptRunner, pkg, fakeSandbox, false, rls);
         setField(svc, "resultDir", Files.createTempDirectory("results").toString());
-        FileProcessResult result = svc.processUploadedFiles(2L, 1L,
+        FileProcessResult result = svc.processUploadedFiles(2L, 1L, "zhang", "小张",
+                new MultipartFile[]{
+                    new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
+                });
+
+        assertTrue(result.isPythonExecuted());
+        assertEquals(expected, result.getPythonOutput());
+
+        org.mockito.ArgumentCaptor<com.toolplatform.entity.RunLog> cap =
+                org.mockito.ArgumentCaptor.forClass(com.toolplatform.entity.RunLog.class);
+        org.mockito.Mockito.verify(repo).save(cap.capture());
+        assertFalse(cap.getValue().isSandboxUsed());
+        assertEquals("SUCCESS", cap.getValue().getStatus());
+    }
+
+    @Test
+    void sandboxEnabled_recordsRunLog() throws Exception {
+        String expected = "sandbox-output";
+        SandboxExecutionService fakeSandbox = new SandboxExecutionService(
+                null, true, "256m", "1", 120L, "img:latest", "1000:1000", "/launcher") {
+            @Override
+            public ScriptRunResult run(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles) {
+                return ScriptRunResult.of(0, expected, "python");
+            }
+        };
+
+        Path tmpDir = Files.createTempDirectory("test_pkg");
+        Path script = tmpDir.resolve("main.py");
+        Files.writeString(script, "print(1)", StandardCharsets.UTF_8);
+
+        ScriptPackageService pkg = new ScriptPackageService(null) {
+            @Override public Path resolvePayload(Long toolId) { return tmpDir; }
+            @Override public Path resolveVenvPython(Long toolId) { return tmpDir.resolve("venv_python"); }
+        };
+
+        Tool tool = makeTool(1L, script);
+        com.toolplatform.repository.RunLogRepository repo =
+                org.mockito.Mockito.mock(com.toolplatform.repository.RunLogRepository.class);
+        org.mockito.Mockito.when(repo.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+        RunLogService rls = new RunLogService(repo);
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, null, pkg, fakeSandbox, true, rls);
+        setField(svc, "resultDir", Files.createTempDirectory("results").toString());
+        FileProcessResult result = svc.processUploadedFiles(1L, 1L, "zhang", "小张",
+                new MultipartFile[]{
+                    new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
+                });
+
+        assertTrue(result.isPythonExecuted());
+        assertEquals(expected, result.getPythonOutput());
+
+        org.mockito.ArgumentCaptor<com.toolplatform.entity.RunLog> cap =
+                org.mockito.ArgumentCaptor.forClass(com.toolplatform.entity.RunLog.class);
+        org.mockito.Mockito.verify(repo).save(cap.capture());
+        com.toolplatform.entity.RunLog rl = cap.getValue();
+        assertEquals(1L, rl.getToolId());
+        assertEquals("zhang", rl.getUsername());
+        assertEquals("小张", rl.getNickname());
+        assertEquals("hi.txt", rl.getInputFileNames());
+        assertTrue(rl.isSandboxUsed());
+        assertEquals("SUCCESS", rl.getStatus());
+        assertEquals(0, rl.getExitCode());
+    }
+
+    @Test
+    void recordException_isSwallowedByTryCatch() throws Exception {
+        String expected = "direct-output";
+        SandboxExecutionService fakeSandbox = new SandboxExecutionService(
+                null, true, "256m", "1", 120L, "img:latest", "1000:1000", "/launcher") {
+            @Override
+            public ScriptRunResult run(String interpreter, Path scriptFile, Map<String, byte[]> dataFiles) {
+                return ScriptRunResult.of(0, expected, "python");
+            }
+        };
+
+        Path tmpDir = Files.createTempDirectory("test_pkg");
+        Path script = tmpDir.resolve("main.py");
+        Files.writeString(script, "print(1)", StandardCharsets.UTF_8);
+
+        ScriptPackageService pkg = new ScriptPackageService(null) {
+            @Override public Path resolvePayload(Long toolId) { return tmpDir; }
+            @Override public Path resolveVenvPython(Long toolId) { return tmpDir.resolve("venv_python"); }
+        };
+
+        Tool tool = makeTool(1L, script);
+        RunLogService rls = org.mockito.Mockito.mock(RunLogService.class);
+        org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(rls).record(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        ToolService svc = new ToolService(stubToolRepo(tool), stubStatRepo(), null, null, pkg, fakeSandbox, true, rls);
+        setField(svc, "resultDir", Files.createTempDirectory("results").toString());
+        FileProcessResult result = svc.processUploadedFiles(1L, 1L, "zhang", "小张",
                 new MultipartFile[]{
                     new org.springframework.mock.web.MockMultipartFile("data", "hi.txt", "text/plain", "hello".getBytes())
                 });

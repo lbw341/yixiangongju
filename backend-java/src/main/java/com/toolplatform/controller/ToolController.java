@@ -552,7 +552,7 @@ public class ToolController extends BaseController {
         if (files == null || files.length == 0) return ResponseEntity.badRequest().body(Map.of("error", "未选择文件"));
 
         try {
-            ToolService.FileProcessResult result = toolService.processUploadedFiles(id, u.getId(), files);
+            ToolService.FileProcessResult result = toolService.processUploadedFiles(id, u.getId(), u.getUsername(), u.getNickname(), files);
 
             if (result.isPythonExecuted()) {
                 return ResponseEntity.ok(Map.of(

@@ -252,6 +252,9 @@ jwt.expiration=604800000
 upload.template-dir=uploads/templates
 upload.result-dir=uploads/results
 upload.max-size=104857600
+
+# 运行日志保留天数（超期由每日 03:30 定时任务自动清理）
+runlog.retention-days=90
 ```
 
 ### 3.4 构建前端
@@ -626,6 +629,8 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | POST | /api/reviews | 提交评价 |
 | GET | /api/files/preview/{file} | 预览结果文件内容（支持文本/图片） |
 | GET | /api/files/download/{file} | 下载结果文件 |
+| GET | /api/run-logs | 获取运行日志列表（仅管理员；支持 tool/user/startDate/endDate/status 筛选 + 分页） |
+| GET | /api/run-logs/{id} | 获取单条运行日志详情（仅管理员，含完整输出） |
 
 ### B. 前端路由表
 
@@ -641,6 +646,7 @@ tar -czf uploads_backup.tar.gz backend-java/uploads/
 | `/manage` | 工具管理 | 作者专属：增删改查自己的工具 |
 | `/messages` | 消息中心 | 查看/回复消息、标记已读、管理员回复反馈 |
 | `/feedback` | 反馈与评价 | 提交反馈、查看历史反馈、发表评价 |
+| `/run-logs` | 运行日志 | 管理员专属：查看用户运行日志与详情 |
 
 ### C. 默认文件目录
 
